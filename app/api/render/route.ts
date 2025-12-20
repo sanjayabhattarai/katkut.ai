@@ -2,9 +2,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import axios from 'axios';
 
-// 1. Define Types (So TypeScript is happy)
-interface RenderRequest {
-  urls: string[];
+interface ClipInput {
+  url: string;
+  duration: number;
 }
 
 interface ShotstackClip {
@@ -15,45 +15,77 @@ interface ShotstackClip {
   };
   start: number;
   length: number;
+  scale?: number;     // Helps fill the screen
+  position?: string;  // Center the video
 }
 
-// 2. Load Keys
 const API_KEY = process.env.SHOTSTACK_API_KEY!;
 const ENDPOINT = process.env.SHOTSTACK_ENDPOINT!;
 
-// 3. The POST Handler (This listens for the button click)
 export async function POST(request: NextRequest) {
   try {
-    const body: RenderRequest = await request.json();
-    const videoUrls = body.urls;
+    const body = await request.json();
+    const clipsData: ClipInput[] = body.clips;
 
-    if (!videoUrls || videoUrls.length === 0) {
+    if (!clipsData || clipsData.length === 0) {
       return NextResponse.json({ error: "No videos provided" }, { status: 400 });
     }
 
-    // 4. Build the Timeline Logic
+    // 🧠 TIKTOK LOGIC LOOP
     let currentTime = 0;
-    const clips: ShotstackClip[] = videoUrls.map((url) => {
-      const clip: ShotstackClip = {
-        asset: { type: "video", src: url, trim: 0.0 },
+    
+    const tracks: ShotstackClip[] = clipsData.map((clip) => {
+      
+      let cutStart = 0;
+      let cutLength = 0;
+
+      // RULE: Smart Cut (Keep short clips, trim long ones)
+      if (clip.duration < 5) {
+        cutStart = 0;
+        cutLength = clip.duration;
+      } else {
+        cutLength = 3.5; // TikToks are faster! (3.5s ideal)
+        const center = clip.duration / 2;
+        cutStart = center - 1.75; 
+      }
+
+      const shotstackClip: ShotstackClip = {
+        asset: { 
+          type: "video", 
+          src: clip.url, 
+          trim: cutStart,
+        },
         start: currentTime,
-        length: 2.0 // Default to 2 seconds per clip
+        length: cutLength,
+        // 📱 IMPORTANT: "Cover" the vertical screen (No black bars)
+        // We scale the video up so it fills the 9:16 frame
+        scale: 0.5, // 0.5 usually fits HD landscape into SD vertical nicely, but 'fit' is handled by size below
+        position: 'center'
       };
-      currentTime += 2.0;
-      return clip;
+
+      // ✂️ No Overlap (Hard Cut)
+      currentTime += cutLength; 
+      
+      return shotstackClip;
     });
 
     const jsonPayload = {
       timeline: {
         background: "#000000",
-        tracks: [{ clips: clips }]
+        tracks: [{ clips: tracks }]
       },
-      output: { format: "mp4", resolution: "sd" }
+      output: { 
+        format: "mp4", 
+        // 📱 VERTICAL RESOLUTION (9:16)
+        size: {
+          width: 720,
+          height: 1280
+        }
+      }
     };
 
-    console.log("🚀 Sending job to Shotstack...");
+    console.log("🚀 Sending TikTok Job to Shotstack...");
     
-    // 5. Send to Shotstack
     const response = await axios.post(ENDPOINT, jsonPayload, {
       headers: {
         "x-api-key": API_KEY,
