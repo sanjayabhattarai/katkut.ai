@@ -30,17 +30,19 @@ export const useVideoPlayer = (project: { clips: Clip[] } | null, activeClipInde
         const currentSrc = vid.getAttribute("src");
 
         if (currentSrc !== activeClip.url) {
-             console.log("Loading New Clip:", activeClip.url);
+             console.log("🎬 Loading Active Clip:", activeClipIndex, activeClip.url);
              setIsBuffering(true);
              vid.src = activeClip.url;
+             // Reset currentTime BEFORE load to ensure clean state
+             vid.currentTime = 0;
              vid.load();
         }
 
         // If clip.muted is true, we mute the HTML video element
-      vid.muted = activeClip.muted || false;
+        vid.muted = activeClip.muted || false;
 
-        // Seek
-        if (Math.abs(vid.currentTime - (activeClip.trimStart || 0)) > 0.5) {
+        // Seek to trim position (only if already loaded)
+        if (vid.readyState >= 2 && Math.abs(vid.currentTime - (activeClip.trimStart || 0)) > 0.5) {
             vid.currentTime = activeClip.trimStart || 0;
         }
 
@@ -54,15 +56,17 @@ export const useVideoPlayer = (project: { clips: Clip[] } | null, activeClipInde
     }
 
 
-    // --- B. INACTIVE PLAYER ---
+    // --- B. INACTIVE PLAYER (Preload next) ---
     if (inactivePlayerRef.current) {
         const vid = inactivePlayerRef.current;
         vid.pause();
         
-        // Preload Next
         const currentSrc = vid.getAttribute("src");
         if (currentSrc !== nextClip.url) {
+            console.log("⏳ Preloading Next Clip:", nextClipIdx, nextClip.url);
             vid.src = nextClip.url;
+            // Set the correct position for the next clip
+            vid.currentTime = nextClip.trimStart || 0;
             vid.load();
         }
     }

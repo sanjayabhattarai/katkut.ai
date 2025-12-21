@@ -21,6 +21,8 @@ interface Clip {
 interface ProjectData {
   clips: Clip[];
   status: string;
+  userId?: string;
+  finalVideoUrl?: string;
 }
 
 export default function Editor() {
@@ -34,7 +36,7 @@ export default function Editor() {
   const [isEditing, setIsEditing] = useState(false);
 
   const { player1Ref, player2Ref, isBuffering, setIsBuffering, activePlayerRef } = useVideoPlayer(project, activeClipIndex, isPlayingAll);
-  const { rendering, finalVideoUrl, setFinalVideoUrl, handleRender } = useRenderExport();
+  const { isRendering, downloadUrl, exportVideo, setDownloadUrl } = useRenderExport(projectId, project?.userId);
 
   useEffect(() => {
     if (!projectId) return;
@@ -49,6 +51,8 @@ export default function Editor() {
           trimDuration: clip.trimDuration ?? (clip.duration > 5 ? 3 : clip.duration),
         }));
         setProject({ ...data, clips: initializedClips });
+        // ✅ Don't auto-open the preview popup - let the user decide
+        // They can access it by clicking "Export" if they want to download
       }
       setLoading(false);
     }
@@ -122,7 +126,7 @@ export default function Editor() {
 
   const handleRenderClick = () => {
     if (!project) return;
-    handleRender(project.clips);
+    exportVideo({ clips: project.clips });
   };
 
   if (loading) return <div className="bg-black h-screen text-white flex items-center justify-center">Loading...</div>;
@@ -133,12 +137,12 @@ export default function Editor() {
   return (
     <main className="h-screen bg-black text-white flex flex-col overflow-hidden font-sans relative">
       <div className={`flex-1 relative flex items-center justify-center bg-[#101010] transition-all duration-500 ${isEditing ? 'pb-64' : 'pb-0'}`}>
-        {finalVideoUrl ? (
-          <ResultPreview finalVideoUrl={finalVideoUrl} onClose={() => setFinalVideoUrl("")} />
+        {downloadUrl ? (
+          <ResultPreview finalVideoUrl={downloadUrl} onClose={() => setDownloadUrl(null)} />
         ) : (
           <VideoPlayer
-            player1Ref={player1Ref}
-            player2Ref={player2Ref}
+            player1Ref={player1Ref as React.RefObject<HTMLVideoElement>}
+            player2Ref={player2Ref as React.RefObject<HTMLVideoElement>}
             activeClipIndex={activeClipIndex}
             isBuffering={isBuffering}
             isPlayingAll={isPlayingAll}
@@ -147,7 +151,7 @@ export default function Editor() {
             onSetBuffering={setIsBuffering}
             onEdit={() => setIsEditing(true)}
             onRender={handleRenderClick}
-            rendering={rendering}
+            rendering={isRendering}
           />
         )}
       </div>
@@ -161,7 +165,7 @@ export default function Editor() {
         onUpdateClip={updateClip}
         onSelectClip={handleSelectClip}
         onExport={handleRenderClick}
-        isRendering={rendering}
+        isRendering={isRendering}
         isPlaying={isPlayingAll}
         onToggleMute={handleToggleMute}
         onTogglePlay={togglePlayAll}

@@ -35,6 +35,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   onRender,
   rendering,
 }) => {
+  // Guard timeUpdate to only active player
+  const handlePlayer1TimeUpdate = (e: React.SyntheticEvent<HTMLVideoElement>) => {
+    if (activeClipIndex % 2 === 0) onTimeUpdate(e);
+  };
+
+  const handlePlayer2TimeUpdate = (e: React.SyntheticEvent<HTMLVideoElement>) => {
+    if (activeClipIndex % 2 !== 0) onTimeUpdate(e);
+  };
+
   return (
     <div 
       className="relative w-full max-w-[350px] aspect-[9/16] bg-black rounded-lg overflow-hidden border border-gray-800 shadow-2xl cursor-pointer"
@@ -45,16 +54,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         ref={player1Ref}
         className="absolute inset-0 w-full h-full object-cover"
         style={{ 
-            visibility: activeClipIndex % 2 === 0 ? 'visible' : 'hidden',
-            zIndex: activeClipIndex % 2 === 0 ? 10 : 0,
-            backgroundColor: '#000' 
+            zIndex: activeClipIndex % 2 === 0 ? 20 : 10
         }}
-        onTimeUpdate={onTimeUpdate}
+        onTimeUpdate={handlePlayer1TimeUpdate}
         onWaiting={() => onSetBuffering(true)}
         onCanPlay={() => onSetBuffering(false)}
         playsInline
         preload="auto"
         crossOrigin="anonymous"
+        webkit-playsinline="true"
       />
 
       {/* --- PLAYER 2 (Odds) --- */}
@@ -62,16 +70,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         ref={player2Ref}
         className="absolute inset-0 w-full h-full object-cover"
         style={{ 
-            visibility: activeClipIndex % 2 !== 0 ? 'visible' : 'hidden',
-            zIndex: activeClipIndex % 2 !== 0 ? 10 : 0,
-            backgroundColor: '#000'
+            zIndex: activeClipIndex % 2 !== 0 ? 20 : 10
         }}
-        onTimeUpdate={onTimeUpdate}
+        onTimeUpdate={handlePlayer2TimeUpdate}
         onWaiting={() => onSetBuffering(true)}
         onCanPlay={() => onSetBuffering(false)}
         playsInline
         preload="auto"
         crossOrigin="anonymous"
+        webkit-playsinline="true"
       />
 
       {/* --- SPINNER --- */}

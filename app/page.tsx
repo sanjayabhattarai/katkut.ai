@@ -7,10 +7,12 @@ import { auth, storage, db } from './api/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
+
 import { processClipsWithVibe, VIBES, VibeType } from './utils/vibeLogic'; 
 import Login from './components/Login';
 import UploadZone from './components/UploadZone';
 import VibeSelector from './components/VibeSelector';
+import { RecentEdits } from './components/dashboard/RecentEdits';
 
 interface ClipData {
   url: string;
@@ -132,20 +134,19 @@ export default function Home() {
           
           {/* Dropdown Menu */}
           {showProfileMenu && (
-            <div className="absolute right-0 mt-2 w-48 bg-gray-900 border border-gray-700 rounded-lg shadow-xl overflow-hidden">
-              <div className="p-3 border-b border-gray-700">
-                <p className="text-sm text-white font-semibold truncate">{user.displayName || 'User'}</p>
-                <p className="text-xs text-gray-400 truncate">{user.email}</p>
+            <div className="absolute right-0 mt-2 bg-gray-900 border border-gray-700 rounded-lg shadow-xl overflow-hidden z-50">
+              <div className="px-3 py-2 flex items-center justify-between gap-2">
+                <p className="text-xs text-white font-semibold truncate">{user.displayName || 'User'}</p>
+                <button
+                  onClick={async () => {
+                    await signOut(auth);
+                    setShowProfileMenu(false);
+                  }}
+                  className="text-red-400 hover:text-red-300 transition text-xs font-bold whitespace-nowrap"
+                >
+                  Logout
+                </button>
               </div>
-              <button
-                onClick={async () => {
-                  await signOut(auth);
-                  setShowProfileMenu(false);
-                }}
-                className="w-full px-4 py-3 text-left text-red-400 hover:bg-gray-800 transition flex items-center gap-2"
-              >
-                🚪 Logout
-              </button>
             </div>
           )}
         </div>
@@ -163,6 +164,14 @@ export default function Home() {
           />
         )}
       </div>
+
+      {/* 👇 RECENT EDITS GALLERY */}
+      {appState === 'idle' && user && (
+        <div className="w-full max-w-6xl mt-12 relative z-10">
+          <RecentEdits userId={user.uid} />
+        </div>
+      )}
+
 
       {/* VIEW 3: AI PROCESSING OVERLAY */}
       {appState === 'uploading' && (
