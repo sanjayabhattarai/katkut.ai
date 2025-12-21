@@ -6,10 +6,12 @@ import { onAuthStateChanged, User, signOut } from "firebase/auth";
 import { auth } from './api/firebase'; 
 import { storage } from './api/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-
+import { db } from './api/firebase'; 
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 // Components
 import Login from './components/Login';
 import UploadZone from './components/UploadZone';
+
 
 // --- Types ---
 interface ClipData {
@@ -54,36 +56,54 @@ export default function Home() {
     });
   };
 
-  // --- 3. Handle File Uploads ---
+
+// --- 3. Handle File Uploads & Save Project ---
   async function handleFilesSelected(files: File[]) {
+    if (!user) return; // Safety check
+    
     setStatus("uploading");
     const uploadedClips: ClipData[] = [];
 
     try {
+      // A. Upload Files (Existing Logic)
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         setProgress(`Uploading ${i + 1} of ${files.length}: ${file.name}`);
         
-        // A. Get Duration
         const duration = await getVideoDuration(file);
-        
-        // B. Upload to Firebase
         const uniqueName = `${Date.now()}-${file.name}`;
-        const storageRef = ref(storage, `uploads/${user?.uid}/${uniqueName}`); // 💡 Note: Storing in user's specific folder
+        const storageRef = ref(storage, `uploads/${user.uid}/${uniqueName}`);
         await uploadBytes(storageRef, file);
         const url = await getDownloadURL(storageRef);
 
-        // C. Save Data
         uploadedClips.push({ url, duration });
       }
 
-      // D. Send to AI
+      // B. 🆕 SAVE PROJECT TO DATABASE
+      setProgress("Saving Project...");
+      
+      const projectRef = await addDoc(collection(db, "projects"), {
+        userId: user.uid,
+        userEmail: user.email,
+        createdAt: serverTimestamp(),
+        status: 'draft',
+        clips: uploadedClips, // We save the list of clips!
+        music: null,          // Placeholder for later
+        settings: {           // Default settings
+            format: '9:16',
+            style: 'tiktok_fast'
+        }
+      });
+
+      console.log("Project Saved! ID:", projectRef.id);
+
+      // C. NOW Render the Video (or we could redirect to an Editor page!)
       handleCreateVideo(uploadedClips);
 
     } catch (error) {
-      console.error("Upload failed:", error);
+      console.error("Error:", error);
       setStatus("idle");
-      alert("Error uploading files.");
+      alert("Failed to upload/save.");
     }
   }
 
