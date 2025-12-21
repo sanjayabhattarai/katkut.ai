@@ -120,6 +120,7 @@ export default function Home() {
         </h1>
         <div className="relative">
           <button 
+            id="profile-button"
             onClick={() => setShowProfileMenu(!showProfileMenu)}
             className="flex items-center gap-3 hover:opacity-80 transition"
           >
@@ -134,7 +135,7 @@ export default function Home() {
           
           {/* Dropdown Menu */}
           {showProfileMenu && (
-            <div className="absolute right-0 mt-2 bg-gray-900 border border-gray-700 rounded-lg shadow-xl overflow-hidden z-50">
+            <div id="profile-menu" className="absolute right-full mr-2 top-0 bg-gray-900 border border-gray-700 rounded-lg shadow-xl overflow-hidden z-50">
               <div className="px-3 py-2 flex items-center justify-between gap-2">
                 <p className="text-xs text-white font-semibold truncate">{user.displayName || 'User'}</p>
                 <button
