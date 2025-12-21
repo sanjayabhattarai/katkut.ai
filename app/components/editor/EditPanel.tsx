@@ -51,6 +51,11 @@ interface Props {
   isPlaying: boolean;
   onTogglePlay: () => void;
   onToggleMute: (index: number) => void;
+  onDeleteClip: (index: number) => void;
+  onUndo: () => void;
+  onRedo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
 }
 
 export function EditPanel({
@@ -66,6 +71,11 @@ export function EditPanel({
   isRendering,
   isPlaying,
   onTogglePlay,
+  onDeleteClip,
+  onUndo,
+  onRedo,
+  canUndo,
+  canRedo,
 }: Props) {
   const handleTrimChange = (newStart: number, newDuration: number) => {
     // 🚨 ATOMIC UPDATE: Send both start AND duration to the parent
@@ -76,9 +86,44 @@ export function EditPanel({
   };
 
   return (
-    <div className={`fixed bottom-0 left-0 w-full bg-[#181818] border-t border-gray-700 transition-transform duration-300 ease-out z-50 ${isOpen ? 'translate-y-0' : 'translate-y-full'}`}>
-      <div className="flex justify-between items-center px-4 py-2 bg-black/20 border-b border-white/5">
-        <span className="text-xs font-bold text-gray-400">EDIT CLIP {activeClipIndex + 1}</span>
+    <div className="w-full h-full bg-[#181818] border-t border-gray-700 flex flex-col overflow-hidden">
+      <div className="flex justify-between items-center px-4 py-2 bg-black/20 border-b border-white/5 flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-gray-400">EDIT CLIP {activeClipIndex + 1}</span>
+          
+          {/* ↩️ UNDO BUTTON */}
+          <button 
+            onClick={onUndo} 
+            disabled={!canUndo}
+            className={`p-1.5 rounded-full transition ${
+              canUndo 
+                ? 'text-white hover:bg-gray-700' 
+                : 'text-gray-600 cursor-not-allowed'
+            }`}
+            title="Undo (Ctrl+Z)"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+            </svg>
+          </button>
+
+          {/* ↪️ REDO BUTTON */}
+          <button 
+            onClick={onRedo}
+            disabled={!canRedo}
+            className={`p-1.5 rounded-full transition ${
+              canRedo 
+                ? 'text-white hover:bg-gray-700' 
+                : 'text-gray-600 cursor-not-allowed'
+            }`}
+            title="Redo (Ctrl+Y)"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6" />
+            </svg>
+          </button>
+        </div>
+        
         <div className="flex items-center gap-2">
           <button
             onClick={onTogglePlay}
@@ -92,7 +137,7 @@ export function EditPanel({
         </div>
       </div>
 
-      <div className="p-6 pb-8 max-w-2xl mx-auto">
+      <div className="flex-1 p-6 pb-8 max-w-2xl mx-auto w-full overflow-y-auto">
         <div className="mb-8">
           <TrimSlider
             totalDuration={activeClip.duration || 10}
@@ -107,11 +152,13 @@ export function EditPanel({
             <div
               key={idx}
               onClick={() => onSelectClip(idx)}
-              className={`relative min-w-[60px] h-[60px] rounded-lg overflow-hidden cursor-pointer border-2 transition-all shrink-0 ${
+              className={`relative min-w-[60px] h-[60px] rounded-lg overflow-hidden cursor-pointer border-2 transition-all shrink-0 group ${
                 activeClipIndex === idx ? 'border-blue-500 scale-110 z-10' : 'border-transparent opacity-50 grayscale'
               }`}
             >
               <video src={clip.url} className="w-full h-full object-cover pointer-events-none" />
+              
+              {/* Mute Button */}
               <button
                 type="button"
                 onClick={(e) => {
@@ -127,6 +174,27 @@ export function EditPanel({
                   <SpeakerOnIcon className="h-3.5 w-3.5" />
                 )}
               </button>
+
+              {/* Delete Button */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDeleteClip(idx);
+                }}
+                className="absolute top-1 left-1 h-6 w-6 flex items-center justify-center rounded-full bg-red-600/90 text-white transition-all hover:bg-red-700 hover:scale-110 z-10"
+                aria-label={`Delete clip ${idx + 1}`}
+                title="Delete Clip"
+              >
+                {/* Trash Icon SVG */}
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+
+              {/* Gradient overlay */}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent pointer-events-none" />
+              
               <div className="absolute bottom-0 w-full bg-black/60 text-[8px] text-center text-white font-mono">{idx + 1}</div>
             </div>
           ))}

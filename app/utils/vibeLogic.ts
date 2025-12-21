@@ -17,6 +17,8 @@ export const VIBES: VibeType[] = [
 interface RawClip {
   url: string;
   duration: number;
+  width?: number;
+  height?: number;
 }
 
 interface ProcessedClip extends RawClip {

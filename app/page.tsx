@@ -17,6 +17,8 @@ import { RecentEdits } from './components/dashboard/RecentEdits';
 interface ClipData {
   url: string;
   duration: number;
+  width?: number;
+  height?: number;
 }
 
 export default function Home() {
@@ -39,13 +41,18 @@ export default function Home() {
     return () => unsubscribe();
   }, []);
 
-  const getVideoDuration = (file: File): Promise<number> => {
+  const getVideoDuration = (file: File): Promise<{ duration: number; width: number; height: number }> => {
     return new Promise((resolve) => {
       const video = document.createElement('video');
       video.preload = 'metadata';
       video.onloadedmetadata = () => {
+        const result = {
+          duration: video.duration,
+          width: video.videoWidth,
+          height: video.videoHeight
+        };
         window.URL.revokeObjectURL(video.src);
-        resolve(video.duration);
+        resolve(result);
       };
       video.src = URL.createObjectURL(file);
     });
@@ -66,14 +73,14 @@ export default function Home() {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         setProgress(`Uploading clip ${i + 1}/${files.length}...`);
-        const duration = await getVideoDuration(file);
+        const { duration, width, height } = await getVideoDuration(file);
         
         const uniqueName = `${Date.now()}-${file.name}`;
         const storageRef = ref(storage, `uploads/${user.uid}/${uniqueName}`);
         await uploadBytes(storageRef, file);
         const url = await getDownloadURL(storageRef);
 
-        uploadedClips.push({ url, duration });
+        uploadedClips.push({ url, duration, width, height });
       }
 
       // 2. AI MAGIC ANIMATION (Fake Delay)

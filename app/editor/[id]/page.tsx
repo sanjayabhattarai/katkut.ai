@@ -1,11 +1,12 @@
 // app/editor/[id]/page.tsx
 "use client";
 import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { db } from '../../api/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { useVideoPlayer } from '../../hooks/useVideoPlayer';
 import { useRenderExport } from '../../hooks/useRenderExport';
+import { useHistory } from '../../hooks/useHistory';
 import { VideoPlayer } from '../../components/VideoPlayer';
 import { EditPanel } from '../../components/editor/EditPanel';
 import { ResultPreview } from '../../components/ResultPreview';
@@ -27,16 +28,21 @@ interface ProjectData {
 
 export default function Editor() {
   const params = useParams();
+  const router = useRouter();
   const projectId = params?.id as string;
 
-  const [project, setProject] = useState<ProjectData | null>(null);
+  const [projectMetadata, setProjectMetadata] = useState<Omit<ProjectData, 'clips'> | null>(null);
+  const { state: clips, set: setClips, undo, redo, canUndo, canRedo } = useHistory<Clip[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeClipIndex, setActiveClipIndex] = useState(0);
   const [isPlayingAll, setIsPlayingAll] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
 
+  // Reconstruct project object for compatibility
+  const project = projectMetadata ? { ...projectMetadata, clips } : null;
+
   const { player1Ref, player2Ref, isBuffering, setIsBuffering, activePlayerRef } = useVideoPlayer(project, activeClipIndex, isPlayingAll);
-  const { isRendering, downloadUrl, exportVideo, setDownloadUrl } = useRenderExport(projectId, project?.userId);
+  const { isRendering, downloadUrl, exportVideo, setDownloadUrl } = useRenderExport(projectId, projectMetadata?.userId);
 
   useEffect(() => {
     if (!projectId) return;
@@ -50,7 +56,10 @@ export default function Editor() {
           trimStart: clip.trimStart ?? (clip.duration > 5 ? (clip.duration / 2) - 1.5 : 0),
           trimDuration: clip.trimDuration ?? (clip.duration > 5 ? 3 : clip.duration),
         }));
-        setProject({ ...data, clips: initializedClips });
+        // Separate clips from metadata
+        const { clips: _, ...metadata } = data;
+        setProjectMetadata(metadata);
+        setClips(initializedClips);
         // ✅ Don't auto-open the preview popup - let the user decide
         // They can access it by clicking "Export" if they want to download
       }
@@ -88,11 +97,11 @@ export default function Editor() {
   const updateClip = (updates: { trimStart?: number; trimDuration?: number }) => {
     if (!project) return;
     setIsPlayingAll(false);
-    const newClips = [...project.clips];
+    const newClips = [...clips];
     const prev = newClips[activeClipIndex];
     const next = { ...prev, ...updates };
     newClips[activeClipIndex] = next;
-    setProject({ ...project, clips: newClips });
+    setClips(newClips);
 
     if (activePlayerRef.current && updates.trimStart !== undefined) {
       activePlayerRef.current.currentTime = updates.trimStart;
@@ -110,13 +119,32 @@ export default function Editor() {
   };
 
   const handleToggleMute = (index: number) => {
-    setProject(prev => {
-      if (!prev) return prev;
-      const updatedClips = prev.clips.map((clip, idx) =>
-        idx === index ? { ...clip, muted: !clip.muted } : clip
-      );
-      return { ...prev, clips: updatedClips };
-    });
+    const updatedClips = clips.map((clip, idx) =>
+      idx === index ? { ...clip, muted: !clip.muted } : clip
+    );
+    setClips(updatedClips);
+  };
+
+  const deleteClip = (indexToDelete: number) => {
+    // Prevent deleting if only one clip remains
+    if (clips.length <= 1) {
+      alert("Cannot delete the last clip!");
+      return;
+    }
+
+    // 1. Stop playback immediately to prevent errors
+    setIsPlayingAll(false);
+
+    // 2. Remove the clip
+    const newClips = clips.filter((_, index) => index !== indexToDelete);
+    setClips(newClips);
+
+    // 3. SAFEGUARD: Adjust the active index
+    // If we deleted the active clip (or one before it), we need to shift the index
+    if (activeClipIndex >= indexToDelete) {
+      // Go back one step, or reset to 0 if it was the first one
+      setActiveClipIndex(Math.max(0, activeClipIndex - 1));
+    }
   };
 
   const handleSelectClip = (index: number) => {
@@ -126,19 +154,20 @@ export default function Editor() {
 
   const handleRenderClick = () => {
     if (!project) return;
-    exportVideo({ clips: project.clips });
+    exportVideo({ clips });
   };
 
   if (loading) return <div className="bg-black h-screen text-white flex items-center justify-center">Loading...</div>;
   if (!project) return <div className="bg-black h-screen text-white flex items-center justify-center">Project not found</div>;
 
-  const activeClip = project.clips[activeClipIndex];
+  const activeClip = clips[activeClipIndex];
 
   return (
-    <main className="h-screen bg-black text-white flex flex-col overflow-hidden font-sans relative">
-      <div className={`flex-1 relative flex items-center justify-center bg-[#101010] transition-all duration-500 ${isEditing ? 'pb-64' : 'pb-0'}`}>
+    <main className="h-screen bg-black text-white flex flex-col overflow-hidden font-sans">
+      {/* VIDEO PLAYER SECTION - Takes 50% when editing, 100% otherwise */}
+      <div className={`relative flex items-center justify-center bg-[#101010] transition-all duration-300 overflow-hidden ${isEditing ? 'flex-1' : 'flex-1'}`}>
         {downloadUrl ? (
-          <ResultPreview finalVideoUrl={downloadUrl} onClose={() => setDownloadUrl(null)} />
+          <ResultPreview finalVideoUrl={downloadUrl} onClose={() => router.push('/')} />
         ) : (
           <VideoPlayer
             player1Ref={player1Ref as React.RefObject<HTMLVideoElement>}
@@ -156,20 +185,30 @@ export default function Editor() {
         )}
       </div>
 
-      <EditPanel
-        isOpen={isEditing}
-        onClose={() => setIsEditing(false)}
-        activeClipIndex={activeClipIndex}
-        activeClip={activeClip}
-        clips={project.clips}
-        onUpdateClip={updateClip}
-        onSelectClip={handleSelectClip}
-        onExport={handleRenderClick}
-        isRendering={isRendering}
-        isPlaying={isPlayingAll}
-        onToggleMute={handleToggleMute}
-        onTogglePlay={togglePlayAll}
-      />
+      {/* EDITING PANEL - Shows/Hides below video */}
+      {isEditing && (
+        <div className="flex-1 bg-[#181818] border-t border-gray-700 overflow-hidden">
+          <EditPanel
+            isOpen={isEditing}
+            onClose={() => setIsEditing(false)}
+            activeClipIndex={activeClipIndex}
+            activeClip={activeClip}
+            clips={clips}
+            onUpdateClip={updateClip}
+            onSelectClip={handleSelectClip}
+            onExport={handleRenderClick}
+            isRendering={isRendering}
+            isPlaying={isPlayingAll}
+            onToggleMute={handleToggleMute}
+            onTogglePlay={togglePlayAll}
+            onDeleteClip={deleteClip}
+            onUndo={undo}
+            onRedo={redo}
+            canUndo={canUndo}
+            canRedo={canRedo}
+          />
+        </div>
+      )}
     </main>
   );
 }

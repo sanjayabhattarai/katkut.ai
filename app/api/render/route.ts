@@ -2,30 +2,70 @@
 import { NextRequest, NextResponse } from 'next/server';
 import axios from 'axios';
 
-// 1. UPDATE INTERFACE
 interface ClipInput {
   url: string;
   duration: number;
-  trimStart?: number;     // 👈 User's choice
-  trimDuration?: number;  // 👈 User's choice
+  trimStart?: number;
+  trimDuration?: number;
   muted?: boolean;
+  width?: number;   // Video dimensions for smart processing
+  height?: number;
 }
 
-// ... (ShotstackClip interface stays the same) ...
-interface ShotstackClip {
-  asset: {
-    type: string;
-    src: string;
-    trim?: number;
-  };
-  start: number;
-  length: number;
-  scale?: number;
-  position?: string;
+interface ShotstackTrack {
+  clips: any[];
 }
 
 const API_KEY = process.env.SHOTSTACK_API_KEY!;
 const ENDPOINT = process.env.SHOTSTACK_ENDPOINT!;
+
+// Helper function to determine if video needs smart background
+const getTracksForClip = (clip: ClipInput, start: number, length: number) => {
+  const isVertical = clip.height && clip.width && clip.height > clip.width;
+
+  const baseClip = {
+    asset: { 
+      type: 'video', 
+      src: clip.url, 
+      trim: clip.trimStart || 0 
+    },
+    start,
+    length
+  };
+
+  // ✅ VERTICAL VIDEO: Simple single track
+  if (isVertical) {
+    return [
+      {
+        clips: [{
+          ...baseClip,
+          fit: 'cover' // Fills the screen
+        }]
+      }
+    ];
+  }
+
+  // ✅ HORIZONTAL/SQUARE VIDEO: Two-track system
+  // Track order: Foreground first (renders on top), Background second (renders behind)
+  return [
+    // Track 1 (Foreground): Clean video with no cropping
+    {
+      clips: [{
+        ...baseClip,
+        fit: 'contain' // Shows the whole video
+      }]
+    },
+    // Track 2 (Background): Blurred fill
+    {
+      clips: [{
+        ...baseClip,
+        scale: 1.8,
+        filter: 'blur',
+        opacity: 0.6
+      }]
+    }
+  ];
+};
 
 export async function POST(request: NextRequest) {
   try {
@@ -37,59 +77,53 @@ export async function POST(request: NextRequest) {
     }
 
     let currentTime = 0;
+    const allTracks: ShotstackTrack[] = [];
     
-    // 🧠 LOGIC UPDATE: User Preference > AI Math
-    const tracks: ShotstackClip[] = clipsData.map((clip) => {
-      
+    // Process each clip and collect all tracks
+    clipsData.forEach((clip) => {
       let cutStart = 0;
       let cutLength = 0;
 
-      // CHECK: Did the user manually edit this?
+      // Determine trim values
       if (clip.trimStart !== undefined && clip.trimDuration !== undefined) {
-          // ✅ USE USER VALUES
-          cutStart = clip.trimStart;
-          cutLength = clip.trimDuration;
+        cutStart = clip.trimStart;
+        cutLength = clip.trimDuration;
       } else {
-          // 🤖 USE AI MATH (Fallback)
-          if (clip.duration < 5) {
-            cutStart = 0;
-            cutLength = clip.duration;
-          } else {
-            cutLength = 3.5; 
-            const center = clip.duration / 2;
-            cutStart = center - 1.75; 
-          }
+        if (clip.duration < 5) {
+          cutStart = 0;
+          cutLength = clip.duration;
+        } else {
+          cutLength = 3.5; 
+          const center = clip.duration / 2;
+          cutStart = center - 1.75; 
+        }
       }
 
-      const shotstackClip: ShotstackClip = {
-        asset: { 
-          type: "video", 
-          src: clip.url, 
-          trim: cutStart,
-        },
-        start: currentTime,
-        length: cutLength,
-        scale: 0.5, 
-        position: 'center'
-      };
+      // Get tracks for this clip (1 for vertical, 2 for horizontal/square)
+      const clipTracks = getTracksForClip(
+        { ...clip, trimStart: cutStart }, 
+        currentTime, 
+        cutLength
+      );
 
-      currentTime += cutLength; 
-      return shotstackClip;
+      // Add all tracks from this clip
+      allTracks.push(...clipTracks);
+      
+      currentTime += cutLength;
     });
 
-    // ... (Payload construction stays same) ...
     const jsonPayload = {
       timeline: {
         background: "#000000",
-        tracks: [{ clips: tracks }]
+        tracks: allTracks
       },
       output: { 
         format: "mp4", 
-        size: { width: 720, height: 1280 }
+        size: { width: 1080, height: 1920 },
+        quality: "high"
       }
     };
 
-    // ... (Axios call stays same) ...
     const response = await axios.post(ENDPOINT, jsonPayload, {
       headers: {
         "x-api-key": API_KEY,
