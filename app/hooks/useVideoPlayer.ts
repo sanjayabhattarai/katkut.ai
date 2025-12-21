@@ -5,6 +5,7 @@ interface Clip {
   duration: number;
   trimStart?: number;
   trimDuration?: number;
+  muted?: boolean;
 }
 
 export const useVideoPlayer = (project: { clips: Clip[] } | null, activeClipIndex: number, isPlayingAll: boolean) => {
@@ -35,6 +36,9 @@ export const useVideoPlayer = (project: { clips: Clip[] } | null, activeClipInde
              vid.load();
         }
 
+        // If clip.muted is true, we mute the HTML video element
+      vid.muted = activeClip.muted || false;
+
         // Seek
         if (Math.abs(vid.currentTime - (activeClip.trimStart || 0)) > 0.5) {
             vid.currentTime = activeClip.trimStart || 0;
@@ -48,6 +52,7 @@ export const useVideoPlayer = (project: { clips: Clip[] } | null, activeClipInde
              vid.pause();
         }
     }
+
 
     // --- B. INACTIVE PLAYER ---
     if (inactivePlayerRef.current) {

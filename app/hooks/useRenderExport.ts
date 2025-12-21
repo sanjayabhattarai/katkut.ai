@@ -6,6 +6,7 @@ interface Clip {
   duration: number;
   trimStart?: number;
   trimDuration?: number;
+  muted?: boolean;
 }
 
 export const useRenderExport = () => {

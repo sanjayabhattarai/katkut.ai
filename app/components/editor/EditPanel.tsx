@@ -6,7 +6,37 @@ interface Clip {
   duration: number;
   trimStart?: number;
   trimDuration?: number;
+  muted?: boolean;
 }
+
+const SpeakerOnIcon = ({ className }: { className?: string }) => (
+  <svg
+    viewBox="0 0 24 24"
+    xmlns="http://www.w3.org/2000/svg"
+    stroke="currentColor"
+    strokeWidth="2"
+    fill="none"
+    className={className}
+  >
+    <path d="M5 9v6h4l5 5V4L9 9H5z" fill="currentColor" />
+    <path d="M16 8.82a4 4 0 010 6.36M18.5 6a7 7 0 010 12" />
+  </svg>
+);
+
+const SpeakerOffIcon = ({ className }: { className?: string }) => (
+  <svg
+    viewBox="0 0 24 24"
+    xmlns="http://www.w3.org/2000/svg"
+    stroke="currentColor"
+    strokeWidth="2"
+    fill="none"
+    className={className}
+  >
+    <path d="M5 9v6h4l5 5V4L9 9H5z" fill="currentColor" />
+    <line x1="18" y1="6" x2="22" y2="10" />
+    <line x1="22" y1="6" x2="18" y2="10" />
+  </svg>
+);
 
 interface Props {
   isOpen: boolean;
@@ -20,9 +50,11 @@ interface Props {
   isRendering: boolean;
   isPlaying: boolean;
   onTogglePlay: () => void;
+  onToggleMute: (index: number) => void;
 }
 
 export function EditPanel({
+  onToggleMute,
   isOpen,
   activeClip,
   clips,
@@ -80,6 +112,21 @@ export function EditPanel({
               }`}
             >
               <video src={clip.url} className="w-full h-full object-cover pointer-events-none" />
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleMute(idx);
+                }}
+                className="absolute top-1 right-1 h-6 w-6 flex items-center justify-center rounded-full bg-black/70 text-white border border-white/10 shadow-sm hover:bg-black/80"
+                aria-label={`${clip.muted ? 'Unmute' : 'Mute'} clip ${idx + 1}`}
+              >
+                {clip.muted ? (
+                  <SpeakerOffIcon className="h-3.5 w-3.5" />
+                ) : (
+                  <SpeakerOnIcon className="h-3.5 w-3.5" />
+                )}
+              </button>
               <div className="absolute bottom-0 w-full bg-black/60 text-[8px] text-center text-white font-mono">{idx + 1}</div>
             </div>
           ))}

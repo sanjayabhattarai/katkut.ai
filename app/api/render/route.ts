@@ -8,6 +8,7 @@ interface ClipInput {
   duration: number;
   trimStart?: number;     // 👈 User's choice
   trimDuration?: number;  // 👈 User's choice
+  muted?: boolean;
 }
 
 // ... (ShotstackClip interface stays the same) ...

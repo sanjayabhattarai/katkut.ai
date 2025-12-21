@@ -15,6 +15,7 @@ interface Clip {
   duration: number;
   trimStart?: number;
   trimDuration?: number;
+  muted?: boolean;
 }
 
 interface ProjectData {
@@ -104,6 +105,16 @@ export default function Editor() {
     }
   };
 
+  const handleToggleMute = (index: number) => {
+    setProject(prev => {
+      if (!prev) return prev;
+      const updatedClips = prev.clips.map((clip, idx) =>
+        idx === index ? { ...clip, muted: !clip.muted } : clip
+      );
+      return { ...prev, clips: updatedClips };
+    });
+  };
+
   const handleSelectClip = (index: number) => {
     setActiveClipIndex(index);
     setIsPlayingAll(false);
@@ -152,6 +163,7 @@ export default function Editor() {
         onExport={handleRenderClick}
         isRendering={rendering}
         isPlaying={isPlayingAll}
+        onToggleMute={handleToggleMute}
         onTogglePlay={togglePlayAll}
       />
     </main>
