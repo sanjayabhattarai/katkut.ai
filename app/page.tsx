@@ -1,49 +1,42 @@
 // app/page.tsx
 "use client";
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import { useRouter } from 'next/navigation';
 import { onAuthStateChanged, User, signOut } from "firebase/auth";
-import { auth } from './api/firebase'; 
-import { storage } from './api/firebase';
+import { auth, storage, db } from './api/firebase'; 
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db } from './api/firebase'; 
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-// Components
+
+import { processClipsWithVibe, VIBES, VibeType } from './utils/vibeLogic'; 
 import Login from './components/Login';
 import UploadZone from './components/UploadZone';
+import VibeSelector from './components/VibeSelector';
 
-
-// --- Types ---
 interface ClipData {
   url: string;
   duration: number;
 }
 
-interface ApiResponse {
-  success: boolean;
-  id: string;
-}
-
 export default function Home() {
-  // --- State: User ---
+  const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
 
-  // --- State: App Logic ---
-  const [status, setStatus] = useState<"idle" | "uploading" | "processing" | "done">("idle");
-  const [videoUrl, setVideoUrl] = useState<string>("");
+  // App State
+  const [appState, setAppState] = useState<'idle' | 'files_selected' | 'uploading'>('idle');
+  const [files, setFiles] = useState<File[]>([]);
+  const [selectedVibe, setSelectedVibe] = useState<VibeType>(VIBES[1]); 
   const [progress, setProgress] = useState<string>("");
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
 
-  // --- 1. Check Login Status on Load ---
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setUser(u);
       setLoadingAuth(false);
     });
     return () => unsubscribe();
   }, []);
 
-  // --- 2. Helper: Get Video Duration ---
   const getVideoDuration = (file: File): Promise<number> => {
     return new Promise((resolve) => {
       const video = document.createElement('video');
@@ -56,21 +49,23 @@ export default function Home() {
     });
   };
 
+  const onFilesDropped = (droppedFiles: File[]) => {
+    setFiles(droppedFiles);
+    setAppState('files_selected');
+  };
 
-// --- 3. Handle File Uploads & Save Project ---
-  async function handleFilesSelected(files: File[]) {
-    if (!user) return; // Safety check
-    
-    setStatus("uploading");
+  const handleBuild = async () => {
+    if (!user) return;
+    setAppState('uploading'); 
     const uploadedClips: ClipData[] = [];
 
     try {
-      // A. Upload Files (Existing Logic)
+      // 1. Upload Files
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        setProgress(`Uploading ${i + 1} of ${files.length}: ${file.name}`);
-        
+        setProgress(`Uploading clip ${i + 1}/${files.length}...`);
         const duration = await getVideoDuration(file);
+        
         const uniqueName = `${Date.now()}-${file.name}`;
         const storageRef = ref(storage, `uploads/${user.uid}/${uniqueName}`);
         await uploadBytes(storageRef, file);
@@ -79,157 +74,118 @@ export default function Home() {
         uploadedClips.push({ url, duration });
       }
 
-      // B. 🆕 SAVE PROJECT TO DATABASE
-      setProgress("Saving Project...");
+      // 2. AI MAGIC ANIMATION (Fake Delay)
+      setProgress("AI is watching your videos...");
+      // ⏳ WAIT 2 SECONDS to show off the animation
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // 3. Calculate Cuts
+      setProgress("Designing the timeline...");
+      const clipsWithVibe = processClipsWithVibe(uploadedClips, selectedVibe.id);
       
+      // ⏳ WAIT 1 SECOND MORE
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // 4. Save Project
+      setProgress("Finalizing studio...");
       const projectRef = await addDoc(collection(db, "projects"), {
         userId: user.uid,
-        userEmail: user.email,
         createdAt: serverTimestamp(),
         status: 'draft',
-        clips: uploadedClips, // We save the list of clips!
-        music: null,          // Placeholder for later
-        settings: {           // Default settings
-            format: '9:16',
-            style: 'tiktok_fast'
-        }
+        vibe: selectedVibe.id,
+        clips: clipsWithVibe,
       });
 
-      console.log("Project Saved! ID:", projectRef.id);
-
-      // C. NOW Render the Video (or we could redirect to an Editor page!)
-      handleCreateVideo(uploadedClips);
+      router.push(`/editor/${projectRef.id}`);
 
     } catch (error) {
-      console.error("Error:", error);
-      setStatus("idle");
-      alert("Failed to upload/save.");
+      console.error(error);
+      setAppState('idle');
+      alert("Failed to build project.");
     }
-  }
+  };
 
-  // --- 4. Send to Backend (Shotstack) ---
-  async function handleCreateVideo(clips: ClipData[]) {
-    setStatus("processing");
-    setProgress("AI is editing (Cutting & Scaling for TikTok)...");
+  if (loadingAuth) return <div className="min-h-screen bg-black text-white flex items-center justify-center">Loading...</div>;
+  if (!user) return <div className="min-h-screen bg-black text-white flex items-center justify-center"><Login onLogin={setUser} /></div>;
 
-    try {
-      const res = await axios.post('/api/render', { clips: clips });
-      const data = res.data as ApiResponse; 
-      checkStatusLoop(data.id);
-    } catch (e) {
-      console.error(e);
-      setStatus("idle");
-      alert("Render failed. Check console.");
-    }
-  }
-
-  // --- 5. Poll for Status ---
-  async function checkStatusLoop(id: string) {
-    const interval = setInterval(async () => {
-      try {
-        const res = await axios.get(`/api/render/status?id=${id}`);
-        const currentStatus = res.data.status;
-
-        if (currentStatus === 'done') {
-            clearInterval(interval);
-            setVideoUrl(res.data.url);
-            setStatus("done");
-        } else if (currentStatus === 'failed') {
-            clearInterval(interval);
-            setStatus("idle");
-            alert("Render Failed! The AI could not process the video.");
-        }
-      } catch (e) {
-        console.error("Check failed", e);
-      }
-    }, 3000); // Check every 3 seconds
-  }
-
-  // --- RENDER: Loading Screen ---
-  if (loadingAuth) {
-    return <div className="flex min-h-screen items-center justify-center bg-black text-white">Loading...</div>;
-  }
-
-  // --- RENDER: Login Screen ---
-  if (!user) {
-    return (
-      <main className="flex min-h-screen flex-col items-center justify-center bg-black text-white p-6">
-        <Login onLogin={setUser} />
-      </main>
-    );
-  }
-
-  // --- RENDER: Main App ---
   return (
-    <main className="flex min-h-screen flex-col items-center p-12 bg-black text-white">
+    <main className="min-h-screen flex flex-col items-center p-12 bg-black text-white relative overflow-hidden font-sans">
       
-      {/* Header */}
-      <div className="flex justify-between w-full max-w-2xl mb-12 items-center border-b border-gray-800 pb-6">
+      {/* HEADER */}
+      <div className="w-full max-w-2xl mb-12 flex justify-between items-center border-b border-gray-800 pb-6 relative z-10">
         <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent">
           KatKut.ai
         </h1>
-        <div className="flex items-center gap-4">
-            {user.photoURL && (
-              <img src={user.photoURL} className="w-10 h-10 rounded-full border border-gray-600" alt="User" />
+        <div className="relative">
+          <button 
+            onClick={() => setShowProfileMenu(!showProfileMenu)}
+            className="flex items-center gap-3 hover:opacity-80 transition"
+          >
+            {user.photoURL ? (
+              <img src={user.photoURL} className="w-10 h-10 rounded-full border-2 border-gray-700" alt="User" />
+            ) : (
+              <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center text-white font-bold">
+                {user.displayName?.[0] || user.email?.[0] || 'U'}
+              </div>
             )}
-            <div className="text-right hidden sm:block">
-              <p className="text-sm font-bold text-gray-200">{user.displayName}</p>
-              <button onClick={() => signOut(auth)} className="text-xs text-red-400 hover:text-red-300">Sign Out</button>
+          </button>
+          
+          {/* Dropdown Menu */}
+          {showProfileMenu && (
+            <div className="absolute right-0 mt-2 w-48 bg-gray-900 border border-gray-700 rounded-lg shadow-xl overflow-hidden">
+              <div className="p-3 border-b border-gray-700">
+                <p className="text-sm text-white font-semibold truncate">{user.displayName || 'User'}</p>
+                <p className="text-xs text-gray-400 truncate">{user.email}</p>
+              </div>
+              <button
+                onClick={async () => {
+                  await signOut(auth);
+                  setShowProfileMenu(false);
+                }}
+                className="w-full px-4 py-3 text-left text-red-400 hover:bg-gray-800 transition flex items-center gap-2"
+              >
+                🚪 Logout
+              </button>
             </div>
+          )}
         </div>
       </div>
       
-      <div className="w-full max-w-2xl">
+      <div className="w-full max-w-2xl relative z-10">
+        {appState === 'idle' && <UploadZone onFilesSelected={onFilesDropped} isLoading={false} />}
         
-        {/* VIEW 1: UPLOAD ZONE */}
-        {status === "idle" && (
-          <UploadZone 
-            onFilesSelected={handleFilesSelected} 
-            isLoading={false} 
+        {appState === 'files_selected' && (
+          <VibeSelector 
+            selectedVibe={selectedVibe}
+            onSelect={setSelectedVibe}
+            onBuild={handleBuild}
+            onCancel={() => setAppState('idle')}
           />
         )}
-
-        {/* VIEW 2: UPLOADING / PROCESSING */}
-        {(status === "uploading" || status === "processing") && (
-            <div className="border border-gray-700 p-12 rounded-xl text-center bg-gray-900/50">
-              <div className="animate-spin text-4xl mb-6">⏳</div>
-              <h2 className="text-2xl font-bold text-blue-400 mb-2">
-                {status === "uploading" ? "Uploading Files..." : "Rendering Video..."}
-              </h2>
-              <p className="text-gray-400 animate-pulse">{progress}</p>
-            </div>
-        )}
-
-        {/* VIEW 3: DONE */}
-        {status === "done" && videoUrl && (
-            <div className="border border-green-500/30 p-8 rounded-xl bg-green-900/10 text-center">
-                <h2 className="text-2xl font-bold mb-6 text-green-400">🎉 Your Reel is Ready!</h2>
-                
-                {/* 9:16 Aspect Ratio Container */}
-                <div className="mx-auto w-[300px] aspect-[9/16] bg-black rounded-lg overflow-hidden border border-gray-700 mb-6 shadow-2xl">
-                  <video controls className="w-full h-full object-cover" src={videoUrl}>
-                      Your browser does not support the video tag.
-                  </video>
-                </div>
-
-                <div className="flex gap-4 justify-center">
-                    <a 
-                      href={videoUrl} 
-                      target="_blank" 
-                      className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-8 rounded-full transition shadow-lg shadow-blue-900/20"
-                    >
-                        Download
-                    </a>
-                    <button 
-                      onClick={() => setStatus("idle")} 
-                      className="text-gray-400 hover:text-white underline py-3 px-4"
-                    >
-                        New Project
-                    </button>
-                </div>
-            </div>
-        )}
       </div>
+
+      {/* VIEW 3: AI PROCESSING OVERLAY */}
+      {appState === 'uploading' && (
+        <div className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center backdrop-blur-md">
+            <div className="relative flex items-center justify-center mb-10">
+              <div className="absolute w-40 h-40 bg-blue-600/30 rounded-full animate-ping"></div>
+              <div className="absolute w-60 h-60 bg-purple-600/20 rounded-full animate-ping delay-100"></div>
+              <div className="relative z-10 bg-gradient-to-tr from-blue-600 to-purple-600 p-8 rounded-full shadow-[0_0_50px_rgba(37,99,235,0.5)]">
+                <span className="text-6xl animate-pulse">✨</span>
+              </div>
+            </div>
+
+            <h2 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-400 mb-4 animate-pulse">
+              AI is Creating Your Edit
+            </h2>
+            <p className="text-gray-400 text-xl mb-10 font-light">Analyzing scenes for <span className="text-blue-400 font-bold">{selectedVibe.label}</span> vibe...</p>
+
+            <div className="w-80 h-1 bg-gray-800 rounded-full overflow-hidden">
+              <div className="h-full bg-blue-500 animate-[width_3s_ease-in-out_infinite]" style={{ width: '100%' }}></div>
+            </div>
+            <p className="mt-4 text-sm text-gray-500 font-mono animate-fade-in">{progress}</p>
+        </div>
+      )}
     </main>
   );
 }

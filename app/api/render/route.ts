@@ -2,11 +2,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import axios from 'axios';
 
+// 1. UPDATE INTERFACE
 interface ClipInput {
   url: string;
   duration: number;
+  trimStart?: number;     // 👈 User's choice
+  trimDuration?: number;  // 👈 User's choice
 }
 
+// ... (ShotstackClip interface stays the same) ...
 interface ShotstackClip {
   asset: {
     type: string;
@@ -15,8 +19,8 @@ interface ShotstackClip {
   };
   start: number;
   length: number;
-  scale?: number;     // Helps fill the screen
-  position?: string;  // Center the video
+  scale?: number;
+  position?: string;
 }
 
 const API_KEY = process.env.SHOTSTACK_API_KEY!;
@@ -31,22 +35,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No videos provided" }, { status: 400 });
     }
 
-    // 🧠 TIKTOK LOGIC LOOP
     let currentTime = 0;
     
+    // 🧠 LOGIC UPDATE: User Preference > AI Math
     const tracks: ShotstackClip[] = clipsData.map((clip) => {
       
       let cutStart = 0;
       let cutLength = 0;
 
-      // RULE: Smart Cut (Keep short clips, trim long ones)
-      if (clip.duration < 5) {
-        cutStart = 0;
-        cutLength = clip.duration;
+      // CHECK: Did the user manually edit this?
+      if (clip.trimStart !== undefined && clip.trimDuration !== undefined) {
+          // ✅ USE USER VALUES
+          cutStart = clip.trimStart;
+          cutLength = clip.trimDuration;
       } else {
-        cutLength = 3.5; // TikToks are faster! (3.5s ideal)
-        const center = clip.duration / 2;
-        cutStart = center - 1.75; 
+          // 🤖 USE AI MATH (Fallback)
+          if (clip.duration < 5) {
+            cutStart = 0;
+            cutLength = clip.duration;
+          } else {
+            cutLength = 3.5; 
+            const center = clip.duration / 2;
+            cutStart = center - 1.75; 
+          }
       }
 
       const shotstackClip: ShotstackClip = {
@@ -57,18 +68,15 @@ export async function POST(request: NextRequest) {
         },
         start: currentTime,
         length: cutLength,
-        // 📱 IMPORTANT: "Cover" the vertical screen (No black bars)
-        // We scale the video up so it fills the 9:16 frame
-        scale: 0.5, // 0.5 usually fits HD landscape into SD vertical nicely, but 'fit' is handled by size below
+        scale: 0.5, 
         position: 'center'
       };
 
-      // ✂️ No Overlap (Hard Cut)
       currentTime += cutLength; 
-      
       return shotstackClip;
     });
 
+    // ... (Payload construction stays same) ...
     const jsonPayload = {
       timeline: {
         background: "#000000",
@@ -76,16 +84,11 @@ export async function POST(request: NextRequest) {
       },
       output: { 
         format: "mp4", 
-        // 📱 VERTICAL RESOLUTION (9:16)
-        size: {
-          width: 720,
-          height: 1280
-        }
+        size: { width: 720, height: 1280 }
       }
     };
 
-    console.log("🚀 Sending TikTok Job to Shotstack...");
-    
+    // ... (Axios call stays same) ...
     const response = await axios.post(ENDPOINT, jsonPayload, {
       headers: {
         "x-api-key": API_KEY,
@@ -93,13 +96,10 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    return NextResponse.json({ 
-      success: true, 
-      id: response.data.response.id 
-    });
+    return NextResponse.json({ success: true, id: response.data.response.id });
 
   } catch (error: any) {
-    console.error("❌ Error:", error.response ? error.response.data : error.message);
+    console.error("❌ Error:", error);
     return NextResponse.json({ error: "Failed to render" }, { status: 500 });
   }
 }
