@@ -4,14 +4,39 @@ export interface VibeType {
   id: string;
   emoji: string;
   label: string;
+  description: string;
   duration: number; // Target length per clip
 }
 
 export const VIBES: VibeType[] = [
-  { id: 'fast', emoji: '⚡', label: 'Fast / TikTok', duration: 0.8 },
-  { id: 'travel', emoji: '✈️', label: 'Travel / Mini Vlog', duration: 3.0 },
-  { id: 'food', emoji: '🍳', label: 'Food / Cooking', duration: 2.0 },
-  { id: 'vibe', emoji: '✨', label: 'Chill Vibe', duration: 4.0 },
+  { 
+    id: 'fast', 
+    emoji: '⚡', 
+    label: 'Hype', 
+    description: 'Choose Hype if you want fast cuts and high energy. Best for TikTok-style reels.',
+    duration: 0.8 
+  },
+  { 
+    id: 'travel', 
+    emoji: '✈️', 
+    label: 'Journey', 
+    description: 'Choose Journey for a mini vlog or "day in my life". Great with voiceovers and storytelling.',
+    duration: 3.0 
+  },
+  { 
+    id: 'food', 
+    emoji: '🍳', 
+    label: 'Cooking', 
+    description: 'Choose Cooking for a process-focused, step-by-step flow. Perfect for recipes, DIY, and tutorials.',
+    duration: 2.0 
+  },
+  { 
+    id: 'vibe', 
+    emoji: '✨', 
+    label: 'Calm', 
+    description: 'Choose Calm for a slow, aesthetic vibe. Best for peaceful and scenic shots.',
+    duration: 4.0 
+  },
 ];
 
 interface RawClip {
