@@ -1,17 +1,41 @@
 // app/components/Login.tsx
 "use client";
-import { signInWithPopup } from "firebase/auth";
+import { signInWithPopup, signInWithRedirect } from "firebase/auth";
 import { auth, googleProvider } from "../api/firebase";
 
 export default function Login({ onLogin }: { onLogin: (user: any) => void }) {
   
   const handleLogin = async () => {
     try {
+      // Try popup first (works on modern iOS with overlay windows)
       const result = await signInWithPopup(auth, googleProvider);
       onLogin(result.user);
-    } catch (error) {
-      console.error("Login failed", error);
-      alert("Login failed. Check console.");
+    } catch (error: any) {
+      const code = error?.code;
+      console.warn("Popup login failed:", code);
+
+      // Ignore user-initiated cancellation (don't force redirect)
+      if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") {
+        return;
+      }
+
+      // Fallback to redirect only for technical failures
+      if (
+        code === "auth/popup-blocked" ||
+        code === "auth/argument-error" ||
+        code === "auth/web-storage-unsupported" ||
+        code === "auth/internal-error"
+      ) {
+        try {
+          console.log("Falling back to redirect...");
+          await signInWithRedirect(auth, googleProvider);
+          return;
+        } catch (redirectError) {
+          console.error("Redirect login also failed", redirectError);
+        }
+      }
+
+      alert("Login failed. Please check your connection or settings.");
     }
   };
 
