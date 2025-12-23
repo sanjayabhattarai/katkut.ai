@@ -9,6 +9,7 @@ import {
   browserLocalPersistence,
   browserSessionPersistence,
   setPersistence,
+  Auth,
 } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
@@ -27,7 +28,7 @@ const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 export const storage = getStorage(app);
 
 // Use client-side friendly persistent auth for iOS/Safari environments
-let authInstance;
+let authInstance: Auth;
 if (typeof window !== "undefined") {
   try {
     authInstance = initializeAuth(app, {
