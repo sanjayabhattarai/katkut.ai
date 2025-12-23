@@ -18,7 +18,13 @@ export default function UploadZone({ onFilesSelected, isLoading }: UploadZonePro
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({ 
     onDrop, 
-    accept: { 'video/*': [] }, // Only accept videos
+    accept: { 
+      'video/*': [], // Accept all video formats
+      'video/quicktime': ['.mov', '.qt'], // ✅ Explicitly accept iPhone format (prevents compression)
+      'video/mp4': ['.mp4', '.m4v'],
+      'video/x-msvideo': ['.avi'],
+      'video/webm': ['.webm']
+    },
     disabled: isLoading
   });
 
