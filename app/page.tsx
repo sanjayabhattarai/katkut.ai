@@ -1,18 +1,29 @@
 // app/page.tsx
 "use client";
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { onAuthStateChanged, User, signOut } from "firebase/auth";
 import { auth, storage, db } from './firebase'; 
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-
+import { v4 as uuidv4 } from 'uuid'; 
 
 import { processClipsWithVibe, VIBES, VibeType } from './utils/vibeLogic'; 
 import Login from './components/Login';
 import UploadZone from './components/UploadZone';
 import VibeSelector from './components/VibeSelector';
 import { RecentEdits } from './components/dashboard/RecentEdits';
+
+// Internal type for the background queue
+interface VideoQueueItem {
+  id: string;
+  file: File;
+  status: 'pending' | 'uploading' | 'completed' | 'error';
+  firebaseUrl?: string;
+  duration?: number;
+  width?: number;
+  height?: number;
+}
 
 interface ClipData {
   url: string;
@@ -28,11 +39,19 @@ export default function Home() {
 
   // App State
   const [appState, setAppState] = useState<'idle' | 'files_selected' | 'uploading'>('idle');
-  const [files, setFiles] = useState<File[]>([]);
+  
+  // The invisible queue
+  const [videoQueue, setVideoQueue] = useState<VideoQueueItem[]>([]);
+  const [isProcessingQueue, setIsProcessingQueue] = useState(false);
+  
   const [selectedVibe, setSelectedVibe] = useState<VibeType>(VIBES[1]); 
   const [progress, setProgress] = useState<string>("");
   const [showProfileMenu, setShowProfileMenu] = useState(false);
 
+  // Lock to prevent double-execution
+  const buildStartedRef = useRef(false);
+
+  // Auth Listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
@@ -41,6 +60,7 @@ export default function Home() {
     return () => unsubscribe();
   }, []);
 
+  // Helper: Get Duration
   const getVideoDuration = (file: File): Promise<{ duration: number; width: number; height: number }> => {
     return new Promise((resolve) => {
       const video = document.createElement('video');
@@ -58,47 +78,134 @@ export default function Home() {
     });
   };
 
+  // 1. TRIGGER: Add files to queue & Show Vibe Selector IMMEDIATELY
   const onFilesDropped = (droppedFiles: File[]) => {
-    setFiles(droppedFiles);
-    setAppState('files_selected');
+    // Prepare the queue items
+    const newItems: VideoQueueItem[] = droppedFiles.map(file => ({
+      id: uuidv4(),
+      file,
+      status: 'pending' // Ready for background worker
+    }));
+
+    setVideoQueue(newItems);
+    setAppState('files_selected'); 
+    // Logic: The UI switches to VibeSelector instantly. 
+    // The useEffect below sees 'pending' items and starts uploading in background.
   };
 
-  const handleBuild = async () => {
+  // 2. BACKGROUND WORKER: Uploads silently while user is choosing vibe
+  useEffect(() => {
+    const processNext = async () => {
+      if (isProcessingQueue) return;
+      if (!user) return;
+
+      const nextVideo = videoQueue.find(v => v.status === 'pending');
+      if (!nextVideo) return;
+
+      setIsProcessingQueue(true); // Lock
+
+      try {
+        await uploadSingleVideo(nextVideo);
+      } catch (err) {
+        console.error("Queue error:", err);
+      } finally {
+        setIsProcessingQueue(false); // Unlock
+      }
+    };
+
+    processNext();
+  }, [videoQueue, isProcessingQueue, user]);
+
+  // 3. Single Upload Logic
+  const uploadSingleVideo = async (item: VideoQueueItem) => {
+    if (!user) return;
+
+    // Update status to uploading (Silent update, user doesn't see this in Vibe view)
+    setVideoQueue(prev => prev.map(v => v.id === item.id ? { ...v, status: 'uploading' } : v));
+
+    return new Promise<void>((resolve) => {
+      getVideoDuration(item.file).then(({ duration, width, height }) => {
+        const uniqueName = `${Date.now()}-${item.file.name}`;
+        const storageRef = ref(storage, `uploads/${user.uid}/${uniqueName}`);
+        
+        const uploadTask = uploadBytesResumable(storageRef, item.file);
+
+        uploadTask.on('state_changed', 
+          (snapshot) => { /* Background progress */ },
+          (error) => {
+            console.error("Upload failed", error);
+            setVideoQueue(prev => prev.map(v => v.id === item.id ? { ...v, status: 'error' } : v));
+            resolve();
+          },
+          async () => {
+            const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
+            setVideoQueue(prev => prev.map(v => v.id === item.id ? { 
+              ...v, 
+              status: 'completed', 
+              firebaseUrl: downloadUrl,
+              duration,
+              width,
+              height
+            } : v));
+            resolve();
+          }
+        );
+      });
+    });
+  };
+
+  // 4. CLICK "MAKE MY VIDEO": Switch to Loading Screen
+  const handleBuild = () => {
     if (!user) return;
     setAppState('uploading'); 
-    const uploadedClips: ClipData[] = [];
+    // The View switches to the "AI Processing" overlay.
+    // The useEffect below handles the "Wait" logic.
+  };
 
+  // 5. FINALIZER: Watches progress on the Loading Screen
+  useEffect(() => {
+    if (appState !== 'uploading') return;
+
+    const pendingVideos = videoQueue.filter(v => v.status === 'pending' || v.status === 'uploading');
+    const total = videoQueue.length;
+    const done = total - pendingVideos.length;
+
+    // A. If uploads are still running, show progress
+    if (pendingVideos.length > 0) {
+      setProgress(`Uploading clips... (${done}/${total})`);
+      return;
+    }
+
+    // B. If uploads are DONE, trigger AI
+    if (!buildStartedRef.current && total > 0) {
+      buildStartedRef.current = true;
+      startAiProcessing();
+    }
+  }, [videoQueue, appState]);
+
+  // 6. AI Processing (Timeline Creation)
+  const startAiProcessing = async () => {
     try {
-      // 1. Upload Files
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        setProgress(`Uploading clip ${i + 1}/${files.length}...`);
-        const { duration, width, height } = await getVideoDuration(file);
-        
-        const uniqueName = `${Date.now()}-${file.name}`;
-        const storageRef = ref(storage, `uploads/${user.uid}/${uniqueName}`);
-        await uploadBytes(storageRef, file);
-        const url = await getDownloadURL(storageRef);
-
-        uploadedClips.push({ url, duration, width, height });
-      }
-
-      // 2. AI MAGIC ANIMATION (Fake Delay)
       setProgress("AI is watching your videos...");
-      // ⏳ WAIT 2 SECONDS to show off the animation
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      // 3. Calculate Cuts
       setProgress("Designing the timeline...");
-      const clipsWithVibe = processClipsWithVibe(uploadedClips, selectedVibe.id);
       
-      // ⏳ WAIT 1 SECOND MORE
+      const validClips: ClipData[] = videoQueue
+        .filter(v => v.status === 'completed' && v.firebaseUrl)
+        .map(v => ({
+          url: v.firebaseUrl!,
+          duration: v.duration || 0,
+          width: v.width,
+          height: v.height
+        }));
+
+      const clipsWithVibe = processClipsWithVibe(validClips, selectedVibe.id);
       await new Promise(resolve => setTimeout(resolve, 1000));
 
-      // 4. Save Project
       setProgress("Finalizing studio...");
       const projectRef = await addDoc(collection(db, "projects"), {
-        userId: user.uid,
+        userId: user!.uid,
         createdAt: serverTimestamp(),
         status: 'draft',
         vibe: selectedVibe.id,
@@ -110,6 +217,7 @@ export default function Home() {
     } catch (error) {
       console.error(error);
       setAppState('idle');
+      buildStartedRef.current = false;
       alert("Failed to build project.");
     }
   };
@@ -140,7 +248,6 @@ export default function Home() {
             )}
           </button>
           
-          {/* Dropdown Menu */}
           {showProfileMenu && (
             <div id="profile-menu" className="absolute right-full mr-2 top-0 bg-gray-900 border border-gray-700 rounded-lg shadow-xl overflow-hidden z-50">
               <div className="px-3 py-2 flex items-center justify-between gap-2">
@@ -161,27 +268,33 @@ export default function Home() {
       </div>
       
       <div className="w-full max-w-2xl relative z-10">
-        {appState === 'idle' && <UploadZone onFilesSelected={onFilesDropped} isLoading={false} />}
+        {/* VIEW 1: UPLOAD ZONE */}
+        {appState === 'idle' && (
+          <UploadZone onFilesSelected={onFilesDropped} isLoading={false} />
+        )}
         
+        {/* VIEW 2: VIBE SELECTOR (Background Uploads Happening Here!) */}
         {appState === 'files_selected' && (
           <VibeSelector 
             selectedVibe={selectedVibe}
             onSelect={setSelectedVibe}
             onBuild={handleBuild}
-            onCancel={() => setAppState('idle')}
+            onCancel={() => {
+              setVideoQueue([]); // Clear queue if cancelled
+              setAppState('idle');
+            }}
           />
         )}
       </div>
 
-      {/* 👇 RECENT EDITS GALLERY */}
+      {/* RECENT EDITS */}
       {appState === 'idle' && user && (
         <div className="w-full max-w-6xl mt-12 relative z-10">
           <RecentEdits userId={user.uid} />
         </div>
       )}
 
-
-      {/* VIEW 3: AI PROCESSING OVERLAY */}
+      {/* VIEW 3: LOADING OVERLAY (Shows progress if background upload isn't done yet) */}
       {appState === 'uploading' && (
         <div className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center backdrop-blur-md">
             <div className="relative flex items-center justify-center mb-10">
@@ -195,11 +308,15 @@ export default function Home() {
             <h2 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-400 mb-4 animate-pulse">
               AI is Creating Your Edit
             </h2>
-            <p className="text-gray-400 text-xl mb-10 font-light">Analyzing scenes for <span className="text-blue-400 font-bold">{selectedVibe.label}</span> vibe...</p>
+            <p className="text-gray-400 text-xl mb-10 font-light">
+              Analyzing scenes for <span className="text-blue-400 font-bold">{selectedVibe.label}</span> vibe...
+            </p>
 
             <div className="w-80 h-1 bg-gray-800 rounded-full overflow-hidden">
               <div className="h-full bg-blue-500 animate-[width_3s_ease-in-out_infinite]" style={{ width: '100%' }}></div>
             </div>
+            
+            {/* Will show "Uploading clips..." only if they aren't done yet */}
             <p className="mt-4 text-sm text-gray-500 font-mono animate-fade-in">{progress}</p>
         </div>
       )}
