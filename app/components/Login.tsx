@@ -1,7 +1,7 @@
 // app/components/Login.tsx
 "use client";
 import { signInWithPopup, signInWithRedirect } from "firebase/auth";
-import { auth, googleProvider } from "../api/firebase";
+import { auth, googleProvider } from "../firebase";
 
 export default function Login({ onLogin }: { onLogin: (user: any) => void }) {
   
@@ -28,6 +28,15 @@ export default function Login({ onLogin }: { onLogin: (user: any) => void }) {
       ) {
         try {
           console.log("Falling back to redirect...");
+          // Guard: redirect requires a valid authDomain and enabled Google provider
+          const authDomain = (auth.app?.options as any)?.authDomain;
+          if (!authDomain) {
+            if (process.env.NODE_ENV !== 'production') {
+              console.error('[Auth] Missing authDomain. Check NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN and Firebase Authorized domains.');
+            }
+            alert('Sign-in is not configured correctly. Please try again later.');
+            return;
+          }
           await signInWithRedirect(auth, googleProvider);
           return;
         } catch (redirectError) {

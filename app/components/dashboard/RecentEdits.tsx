@@ -1,6 +1,6 @@
 // components/dashboard/RecentEdits.tsx
 import React, { useEffect, useState } from 'react';
-import { db } from '../../api/firebase';
+import { db } from '../../firebase';
 import { collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
 import Link from 'next/link';
 import Image from 'next/image';

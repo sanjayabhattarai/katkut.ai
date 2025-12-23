@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { onAuthStateChanged, User, signOut } from "firebase/auth";
-import { auth, storage, db } from './api/firebase'; 
+import { auth, storage, db } from './firebase'; 
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 

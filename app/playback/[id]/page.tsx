@@ -2,7 +2,7 @@
 "use client";
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { db } from '../../api/firebase';
+import { db } from '../../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 
 interface Project {
