@@ -10,6 +10,7 @@ import { useHistory } from '../../hooks/useHistory';
 import { VideoPlayer } from '../../components/VideoPlayer';
 import { EditPanel } from '../../components/editor/EditPanel';
 import { ResultPreview } from '../../components/ResultPreview';
+import { ExportBorder } from '../../components/ui/ExportBorder';
 
 interface Clip {
   url: string;
@@ -42,7 +43,7 @@ export default function Editor() {
   const project = projectMetadata ? { ...projectMetadata, clips } : null;
 
   const { player1Ref, player2Ref, isBuffering, setIsBuffering, activePlayerRef } = useVideoPlayer(project, activeClipIndex, isPlayingAll);
-  const { isRendering, downloadUrl, exportVideo, setDownloadUrl } = useRenderExport(projectId, projectMetadata?.userId);
+  const { isRendering, downloadUrl, exportVideo, setDownloadUrl, renderProgress } = useRenderExport(projectId, projectMetadata?.userId);
 
   useEffect(() => {
     if (!projectId) return;
@@ -164,6 +165,7 @@ export default function Editor() {
 
   const handleRenderClick = () => {
     if (!project) return;
+    setIsEditing(false); // Close editing panel when export starts
     exportVideo({ clips });
   };
 
@@ -174,30 +176,80 @@ export default function Editor() {
 
   return (
     <main className="h-screen bg-black text-white flex flex-col overflow-hidden font-sans">
-      {/* VIDEO PLAYER SECTION - Takes 50% when editing, 100% otherwise */}
-      <div className={`relative flex items-center justify-center bg-[#101010] transition-all duration-300 overflow-hidden ${isEditing ? 'flex-1' : 'flex-1'}`}>
+      {/* VIDEO PLAYER SECTION */}
+      <div className={`relative flex flex-col items-center justify-center bg-[#101010] transition-all duration-300 overflow-hidden ${isEditing ? 'h-[60vh] md:h-[55vh] pt-4 md:pt-8' : 'flex-1 pt-6 md:pt-12'}`}>
         {downloadUrl ? (
           <ResultPreview finalVideoUrl={downloadUrl} onClose={() => router.push('/')} />
         ) : (
-          <VideoPlayer
-            player1Ref={player1Ref as React.RefObject<HTMLVideoElement>}
-            player2Ref={player2Ref as React.RefObject<HTMLVideoElement>}
-            activeClipIndex={activeClipIndex}
-            isBuffering={isBuffering}
-            isPlayingAll={isPlayingAll}
-            onTimeUpdate={handleTimeUpdate}
-            onTogglePlay={togglePlayAll}
-            onSetBuffering={setIsBuffering}
-            onEdit={() => setIsEditing(true)}
-            onRender={handleRenderClick}
-            rendering={isRendering}
-          />
+          <>
+            <VideoPlayer
+              player1Ref={player1Ref as React.RefObject<HTMLVideoElement>}
+              player2Ref={player2Ref as React.RefObject<HTMLVideoElement>}
+              activeClipIndex={activeClipIndex}
+              isBuffering={isBuffering}
+              isPlayingAll={isPlayingAll}
+              onTimeUpdate={handleTimeUpdate}
+              onTogglePlay={togglePlayAll}
+              onSetBuffering={setIsBuffering}
+              onEdit={() => setIsEditing(true)}
+              onRender={handleRenderClick}
+              rendering={isRendering}
+            />
+
+            {/* Manual Edit Call-to-Action */}
+            {!isEditing && (
+              <div className="text-center mt-6 md:mt-10">
+                <p className="text-gray-500 text-xs md:text-sm mb-2">Want to change a specific clip?</p>
+                <button 
+                  onClick={() => setIsEditing(true)} 
+                  className="text-blue-400 hover:text-blue-300 text-sm md:text-base font-bold flex items-center justify-center gap-2 mx-auto transition-colors"
+                >
+                  <svg className="w-4 h-4 md:w-5 md:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                  Enter Manual Edit Mode
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
 
-      {/* EDITING PANEL - Shows/Hides below video */}
+      {/* FULL SCREEN EXPORT OVERLAY */}
+      {isRendering && (
+        <div className="fixed inset-0 z-[60] bg-black flex flex-col items-center justify-center p-6 animate-fade-in">
+          
+          {/* 1. TEXT SECTION (Above Video) */}
+          <div className="text-center mb-8">
+            <h1 className="text-5xl font-bold text-white mb-2 font-mono">
+              {Math.round(renderProgress)}%
+            </h1>
+            <p className="text-gray-400 text-sm max-w-xs mx-auto leading-relaxed">
+              Keep this screen open and don&apos;t lock your phone. We&apos;ll let you save or share the video in a moment.
+            </p>
+          </div>
+
+          {/* 2. VIDEO CONTAINER WITH BORDER */}
+          <div className="relative w-full max-w-[320px] aspect-[9/16] bg-gray-900 rounded-3xl shadow-2xl">
+            
+            {/* The Actual Video Preview */}
+            <video 
+              ref={activePlayerRef}
+              className="w-full h-full object-cover rounded-3xl opacity-50"
+              muted
+              playsInline
+            />
+
+            {/* ✨ The Orange Border Component ✨ */}
+            <ExportBorder progress={renderProgress} />
+            
+          </div>
+        </div>
+      )}
+
+      {/* EDITING PANEL - Shows below video with responsive height */}
       {isEditing && (
-        <div className="flex-1 bg-[#181818] border-t border-gray-700 overflow-hidden">
+        <div className="h-[40vh] md:h-[45vh] bg-[#181818] border-t-4 border-gray-700/50 overflow-hidden mt-3 md:mt-6">
           <EditPanel
             isOpen={isEditing}
             onClose={() => setIsEditing(false)}

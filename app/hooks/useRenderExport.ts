@@ -18,6 +18,7 @@ interface RenderPayload {
 export function useRenderExport(projectId?: string, userId?: string) {
   const [isRendering, setIsRendering] = useState(false);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [renderProgress, setRenderProgress] = useState(0);
 
   const exportVideo = async (payload: RenderPayload) => {
     if (!projectId || !userId) {
@@ -27,8 +28,10 @@ export function useRenderExport(projectId?: string, userId?: string) {
 
     setIsRendering(true);
     setDownloadUrl(null);
+    setRenderProgress(0);
 
     try {
+      setRenderProgress(10); // Starting render
       const response = await fetch('/api/render', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -42,18 +45,22 @@ export function useRenderExport(projectId?: string, userId?: string) {
       const { id: renderId } = await response.json();
       if (!renderId) throw new Error('No render id returned');
 
+      setRenderProgress(20); // Render job created
       const shotstackUrl = await pollForStatus(renderId);
       if (!shotstackUrl) throw new Error('Render failed');
 
+      setRenderProgress(70); // Render complete, downloading
       const videoRes = await fetch(shotstackUrl);
       if (!videoRes.ok) throw new Error('Failed to download rendered video');
       const videoBlob = await videoRes.blob();
 
+      setRenderProgress(80); // Uploading to Firebase
       const storageRef = ref(storage, `users/${userId}/exports/${projectId}.mp4`);
       await uploadBytes(storageRef, videoBlob);
 
       const firebaseUrl = await getDownloadURL(storageRef);
 
+      setRenderProgress(90); // Updating database
       const projectRef = doc(db, 'projects', projectId);
       await updateDoc(projectRef, {
         finalVideoUrl: firebaseUrl,
@@ -61,6 +68,7 @@ export function useRenderExport(projectId?: string, userId?: string) {
         lastExportedAt: serverTimestamp(),
       });
 
+      setRenderProgress(100); // Complete
       setDownloadUrl(firebaseUrl);
       return firebaseUrl;
     } catch (error) {
@@ -69,16 +77,24 @@ export function useRenderExport(projectId?: string, userId?: string) {
       return null;
     } finally {
       setIsRendering(false);
+      setRenderProgress(0);
     }
   };
 
   const pollForStatus = async (id: string): Promise<string | null> => {
     return new Promise((resolve, reject) => {
+      let pollProgress = 30;
       const interval = setInterval(async () => {
         try {
           const res = await fetch(`/api/render/status?id=${id}`);
           if (!res.ok) throw new Error('Status check failed');
           const data = await res.json();
+
+          // Gradually increase progress while polling (30% to 65%)
+          if (pollProgress < 65) {
+            pollProgress += 5;
+            setRenderProgress(pollProgress);
+          }
 
           if (data.status === 'done' && data.url) {
             clearInterval(interval);
@@ -95,5 +111,5 @@ export function useRenderExport(projectId?: string, userId?: string) {
     });
   };
 
-  return { isRendering, downloadUrl, exportVideo, setDownloadUrl };
+  return { isRendering, downloadUrl, exportVideo, setDownloadUrl, renderProgress };
 }

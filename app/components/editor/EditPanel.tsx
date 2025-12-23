@@ -89,7 +89,7 @@ function SortableClipItem({ clip, index, isActive, onSelect, onToggleMute, onDel
       {...attributes}
       {...listeners}
       onClick={() => onSelect(index)}
-      className={`relative min-w-[60px] h-[60px] rounded-lg overflow-hidden border-2 transition-all shrink-0 group ${
+      className={`relative w-[60px] h-[60px] rounded-lg overflow-hidden border-2 transition-all shrink-0 group ${
         isActive ? 'border-blue-500 scale-110 z-10' : 'border-transparent opacity-50 grayscale'
       } ${isDragging ? 'shadow-2xl scale-105' : ''}`}
     >
@@ -266,8 +266,8 @@ export function EditPanel({
         </div>
       </div>
 
-      <div className="flex-1 p-6 pb-8 max-w-2xl mx-auto w-full overflow-y-auto">
-        <div className="mb-8">
+      <div className="flex-1 p-6 pb-4 max-w-2xl mx-auto w-full overflow-y-auto">
+        <div className="mb-6">
           <TrimSlider
             totalDuration={activeClip.duration || 10}
             trimStart={activeClip.trimStart || 0}
@@ -285,7 +285,7 @@ export function EditPanel({
             items={clips.map((_, idx) => `clip-${idx}`)}
             strategy={horizontalListSortingStrategy}
           >
-            <div className="flex gap-2 overflow-x-auto pb-4 no-scrollbar mb-4">
+            <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
               {clips.map((clip, idx) => (
                 <SortableClipItem
                   key={`clip-${idx}`}
@@ -300,14 +300,6 @@ export function EditPanel({
             </div>
           </SortableContext>
         </DndContext>
-
-        <button
-          onClick={onExport}
-          disabled={isRendering}
-          className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl shadow-lg transition flex items-center justify-center gap-2"
-        >
-          {isRendering ? <span className="animate-pulse">⏳ Rendering...</span> : <span> Export Final Video</span>}
-        </button>
       </div>
     </div>
   );

@@ -81,6 +81,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         webkit-playsinline="true"
       />
 
+      {/* --- PREVIEW MODE TEXT --- */}
+      <div className="absolute top-3 left-3 z-40">
+        <p className="text-yellow-400 text-[10px] font-bold bg-black/60 backdrop-blur-sm px-2 py-1 rounded-md">Preview Mode</p>
+      </div>
+
       {/* --- SPINNER --- */}
       {isBuffering && isPlayingAll && (
           <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/40 backdrop-blur-[2px]">
@@ -97,17 +102,36 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           </div>
       )}
 
-      {/* --- BUTTONS --- */}
-      {!isPlayingAll && (
-        <div className="absolute bottom-6 w-full flex justify-center gap-4 px-4 z-40 animate-fade-in-up" onClick={e => e.stopPropagation()}>
-            <button onClick={onEdit} className="flex-1 bg-gray-800/90 backdrop-blur border border-gray-600 hover:bg-gray-700 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition">
-                ✂️ Edit
-            </button>
-            <button onClick={onRender} disabled={rendering} className="flex-1 bg-gradient-to-r from-blue-600 to-purple-600 hover:scale-105 text-white font-bold py-3 rounded-xl shadow-lg transition">
-                {rendering ? "⏳..." : "🚀 Export"}
-            </button>
-        </div>
-      )}
+      {/* --- QUALITY DISCLAIMER & EXPORT BUTTON (Always Visible) --- */}
+      <div className="absolute bottom-6 w-full flex flex-col items-center gap-2 px-4 z-40" onClick={e => e.stopPropagation()}>
+          <p className="text-gray-300 text-[10px] text-center leading-tight px-2 bg-black/60 backdrop-blur-sm py-1.5 rounded-lg">
+            Don&apos;t worry! This is a low-res draft to save your data. Your final export will be smooth 4K quality.
+          </p>
+          <button 
+            onClick={onRender} 
+            disabled={rendering} 
+            className="group relative bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-sm py-2 px-6 rounded-lg shadow-lg hover:shadow-blue-500/50 transition-all duration-200 hover:scale-105 active:scale-95"
+          >
+            <span className="relative z-10 flex items-center justify-center gap-2">
+              {rendering ? (
+                <>
+                  <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+                  </svg>
+                  Export
+                </>
+              )}
+            </span>
+          </button>
+      </div>
     </div>
   );
 };
