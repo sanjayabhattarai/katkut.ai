@@ -31,6 +31,8 @@ export const ResultPreview: React.FC<ResultPreviewProps> = ({
       }
     } catch (e) {
       console.error(e);
+    } finally {
+      // Always reset loading state, even if user cancels
       setLoading(false);
     }
   };
