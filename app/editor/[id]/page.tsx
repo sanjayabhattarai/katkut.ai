@@ -152,6 +152,16 @@ export default function Editor() {
     setIsPlayingAll(false);
   };
 
+  const handleReorderClips = (newClips: Clip[]) => {
+    setClips(newClips);
+    // Keep active clip tracking after reorder
+    const currentClip = clips[activeClipIndex];
+    const newIndex = newClips.findIndex(clip => clip.url === currentClip.url);
+    if (newIndex !== -1) {
+      setActiveClipIndex(newIndex);
+    }
+  };
+
   const handleRenderClick = () => {
     if (!project) return;
     exportVideo({ clips });
@@ -196,6 +206,7 @@ export default function Editor() {
             clips={clips}
             onUpdateClip={updateClip}
             onSelectClip={handleSelectClip}
+            onReorderClips={handleReorderClips}
             onExport={handleRenderClick}
             isRendering={isRendering}
             isPlaying={isPlayingAll}

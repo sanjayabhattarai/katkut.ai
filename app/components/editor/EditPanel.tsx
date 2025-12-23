@@ -1,5 +1,23 @@
 import React from 'react';
 import { TrimSlider } from './TrimSlider';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+  TouchSensor,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  horizontalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 interface Clip {
   url: string;
@@ -38,6 +56,86 @@ const SpeakerOffIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
+interface SortableClipItemProps {
+  clip: Clip;
+  index: number;
+  isActive: boolean;
+  onSelect: (index: number) => void;
+  onToggleMute: (index: number) => void;
+  onDelete: (index: number) => void;
+}
+
+function SortableClipItem({ clip, index, isActive, onSelect, onToggleMute, onDelete }: SortableClipItemProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: `clip-${index}` });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    cursor: isDragging ? 'grabbing' : 'grab',
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      onClick={() => onSelect(index)}
+      className={`relative min-w-[60px] h-[60px] rounded-lg overflow-hidden border-2 transition-all shrink-0 group ${
+        isActive ? 'border-blue-500 scale-110 z-10' : 'border-transparent opacity-50 grayscale'
+      } ${isDragging ? 'shadow-2xl scale-105' : ''}`}
+    >
+      <video src={clip.url} className="w-full h-full object-cover pointer-events-none" />
+      
+      {/* Mute Button */}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggleMute(index);
+        }}
+        className="absolute top-1 right-1 h-6 w-6 flex items-center justify-center rounded-full bg-black/70 text-white border border-white/10 shadow-sm hover:bg-black/80 z-20"
+        aria-label={`${clip.muted ? 'Unmute' : 'Mute'} clip ${index + 1}`}
+      >
+        {clip.muted ? (
+          <SpeakerOffIcon className="h-3.5 w-3.5" />
+        ) : (
+          <SpeakerOnIcon className="h-3.5 w-3.5" />
+        )}
+      </button>
+
+      {/* Delete Button */}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onDelete(index);
+        }}
+        className="absolute top-1 left-1 h-6 w-6 flex items-center justify-center rounded-full bg-red-600/90 text-white transition-all hover:bg-red-700 hover:scale-110 z-20"
+        aria-label={`Delete clip ${index + 1}`}
+        title="Delete Clip"
+      >
+        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+        </svg>
+      </button>
+
+      {/* Gradient overlay */}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent pointer-events-none" />
+      
+      <div className="absolute bottom-0 w-full bg-black/60 text-[8px] text-center text-white font-mono">{index + 1}</div>
+    </div>
+  );
+}
+
 interface Props {
   isOpen: boolean;
   activeClip: Clip;
@@ -46,6 +144,7 @@ interface Props {
   onClose: () => void;
   onUpdateClip: (updates: { trimStart?: number; trimDuration?: number }) => void;
   onSelectClip: (index: number) => void;
+  onReorderClips: (clips: Clip[]) => void;
   onExport: () => void;
   isRendering: boolean;
   isPlaying: boolean;
@@ -67,6 +166,7 @@ export function EditPanel({
   onClose,
   onUpdateClip,
   onSelectClip,
+  onReorderClips,
   onExport,
   isRendering,
   isPlaying,
@@ -77,6 +177,35 @@ export function EditPanel({
   canUndo,
   canRedo,
 }: Props) {
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8, // Require 8px movement before drag starts
+      },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 200, // 200ms delay for touch
+        tolerance: 5,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      const oldIndex = parseInt(active.id.toString().replace('clip-', ''));
+      const newIndex = parseInt(over.id.toString().replace('clip-', ''));
+      
+      const newClips = arrayMove(clips, oldIndex, newIndex);
+      onReorderClips(newClips);
+    }
+  };
+
   const handleTrimChange = (newStart: number, newDuration: number) => {
     // 🚨 ATOMIC UPDATE: Send both start AND duration to the parent
     onUpdateClip({ 
@@ -147,58 +276,30 @@ export function EditPanel({
           />
         </div>
 
-        <div className="flex gap-2 overflow-x-auto pb-4 no-scrollbar mb-4">
-          {clips.map((clip, idx) => (
-            <div
-              key={idx}
-              onClick={() => onSelectClip(idx)}
-              className={`relative min-w-[60px] h-[60px] rounded-lg overflow-hidden cursor-pointer border-2 transition-all shrink-0 group ${
-                activeClipIndex === idx ? 'border-blue-500 scale-110 z-10' : 'border-transparent opacity-50 grayscale'
-              }`}
-            >
-              <video src={clip.url} className="w-full h-full object-cover pointer-events-none" />
-              
-              {/* Mute Button */}
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onToggleMute(idx);
-                }}
-                className="absolute top-1 right-1 h-6 w-6 flex items-center justify-center rounded-full bg-black/70 text-white border border-white/10 shadow-sm hover:bg-black/80"
-                aria-label={`${clip.muted ? 'Unmute' : 'Mute'} clip ${idx + 1}`}
-              >
-                {clip.muted ? (
-                  <SpeakerOffIcon className="h-3.5 w-3.5" />
-                ) : (
-                  <SpeakerOnIcon className="h-3.5 w-3.5" />
-                )}
-              </button>
-
-              {/* Delete Button */}
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDeleteClip(idx);
-                }}
-                className="absolute top-1 left-1 h-6 w-6 flex items-center justify-center rounded-full bg-red-600/90 text-white transition-all hover:bg-red-700 hover:scale-110 z-10"
-                aria-label={`Delete clip ${idx + 1}`}
-                title="Delete Clip"
-              >
-                {/* Trash Icon SVG */}
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
-              </button>
-
-              {/* Gradient overlay */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent pointer-events-none" />
-              
-              <div className="absolute bottom-0 w-full bg-black/60 text-[8px] text-center text-white font-mono">{idx + 1}</div>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={clips.map((_, idx) => `clip-${idx}`)}
+            strategy={horizontalListSortingStrategy}
+          >
+            <div className="flex gap-2 overflow-x-auto pb-4 no-scrollbar mb-4">
+              {clips.map((clip, idx) => (
+                <SortableClipItem
+                  key={`clip-${idx}`}
+                  clip={clip}
+                  index={idx}
+                  isActive={activeClipIndex === idx}
+                  onSelect={onSelectClip}
+                  onToggleMute={onToggleMute}
+                  onDelete={onDeleteClip}
+                />
+              ))}
             </div>
-          ))}
-        </div>
+          </SortableContext>
+        </DndContext>
 
         <button
           onClick={onExport}

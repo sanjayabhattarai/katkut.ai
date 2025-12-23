@@ -24,3 +24,17 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Drag and Drop Cursor Styles */
+.sortable-clip {
+  cursor: grab;
+}
+
+.sortable-clip:active {
+  cursor: grabbing;
+}
+
+.sortable-clip.dragging {
+  cursor: grabbing;
+  opacity: 0.5;
+}
