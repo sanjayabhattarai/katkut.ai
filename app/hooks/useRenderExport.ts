@@ -32,17 +32,30 @@ export function useRenderExport(projectId?: string, userId?: string) {
 
     try {
       setRenderProgress(10); // Starting render
+      
+      // Transform clips to match API expected format
+      const transformedPayload = {
+        clips: payload.clips.map(clip => ({
+          assetUrl: clip.url,
+          length: clip.trimDuration || clip.duration,
+          startFrom: clip.trimStart || 0,
+          muted: clip.muted || false
+        }))
+      };
+      
       const response = await fetch('/api/render', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(transformedPayload),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to start render');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to start render');
       }
 
-      const { id: renderId } = await response.json();
+      const data = await response.json();
+      const renderId = data.id || data.renderId;
       if (!renderId) throw new Error('No render id returned');
 
       setRenderProgress(20); // Render job created
