@@ -13,7 +13,6 @@ export interface Vibe {
     minDuration: number;  // Seconds (e.g., 1.0)
     maxDuration: number;  // Seconds (e.g., 3.0)
     transition: 'fade' | 'cut' | 'zoom' | 'wipe';
-    effect?: 'zoomIn' | 'pan' | 'zoomOut' | 'none'; 
   };
 }
 
@@ -30,28 +29,9 @@ export interface ProcessedClip {
   startFrom: number; // Where to start cutting in the raw file
   length: number;    // How long the clip plays
   transition: string;
-  // Visual Effects properties for Shotstack
-  scaleIn: number;   
-  scaleOut: number;  
-  panX: number;      
 }
 
-// 3. HELPER: Translate "Text Effect" to "Shotstack Numbers"
-const getEffectSettings = (effectName: string) => {
-  switch (effectName) {
-    case 'zoomIn':
-      return { scaleIn: 1.0, scaleOut: 1.15, panX: 0 }; // Grow by 15%
-    case 'zoomOut':
-      return { scaleIn: 1.15, scaleOut: 1.0, panX: 0 }; // Shrink
-    case 'pan':
-      // Start zoomed in slightly so we have room to move without black bars
-      return { scaleIn: 1.1, scaleOut: 1.1, panX: 0.1 }; // Move camera right
-    default:
-      return { scaleIn: 1.0, scaleOut: 1.0, panX: 0 }; // Static
-  }
-};
-
-// 4. THE MASTER VIBE LIST 🎨
+// 3. THE MASTER VIBE LIST 🎨
 export const VIBES: Vibe[] = [
   // --- 👤 PERSONAL VIBES ---
   {
@@ -60,7 +40,7 @@ export const VIBES: Vibe[] = [
     category: 'personal',
     emoji: '⚡️',
     description: 'Fast cuts, trending sounds, flash effects.',
-    cutSettings: { minDuration: 0.6, maxDuration: 1.5, transition: 'zoom', effect: 'none' }
+    cutSettings: { minDuration: 0.6, maxDuration: 1.5, transition: 'cut' }
   },
   {
     id: 'chill',
@@ -68,7 +48,7 @@ export const VIBES: Vibe[] = [
     category: 'personal',
     emoji: '☕️',
     description: 'Slow transitions, relaxing atmosphere.',
-    cutSettings: { minDuration: 3.0, maxDuration: 5.0, transition: 'fade', effect: 'zoomIn' }
+    cutSettings: { minDuration: 3.0, maxDuration: 5.0, transition: 'fade' }
   },
   {
     id: 'vlog',
@@ -76,7 +56,7 @@ export const VIBES: Vibe[] = [
     category: 'personal',
     emoji: '✈️',
     description: 'Bright colors, upbeat tempo, journey style.',
-    cutSettings: { minDuration: 2.0, maxDuration: 4.0, transition: 'wipe', effect: 'none' }
+    cutSettings: { minDuration: 2.0, maxDuration: 4.0, transition: 'cut' }
   },
   {
     id: 'memories',
@@ -84,7 +64,7 @@ export const VIBES: Vibe[] = [
     category: 'personal',
     emoji: '🎞️',
     description: 'Slow motion, sentimental music.',
-    cutSettings: { minDuration: 3.5, maxDuration: 6.0, transition: 'fade', effect: 'pan' }
+    cutSettings: { minDuration: 3.5, maxDuration: 6.0, transition: 'fade' }
   },
 
   // --- 💼 BUSINESS VIBES ---
@@ -94,7 +74,7 @@ export const VIBES: Vibe[] = [
     category: 'business',
     emoji: '🏡',
     description: 'Smooth pans, elegant transitions.',
-    cutSettings: { minDuration: 4.0, maxDuration: 6.0, transition: 'fade', effect: 'pan' }
+    cutSettings: { minDuration: 4.0, maxDuration: 6.0, transition: 'fade' }
   },
   {
     id: 'menu',
@@ -102,7 +82,7 @@ export const VIBES: Vibe[] = [
     category: 'business',
     emoji: '🍔',
     description: 'Dynamic cuts, makes food look fresh.',
-    cutSettings: { minDuration: 1.0, maxDuration: 2.5, transition: 'cut', effect: 'zoomIn' }
+    cutSettings: { minDuration: 1.0, maxDuration: 2.5, transition: 'cut' }
   },
   {
     id: 'showcase',
@@ -110,7 +90,7 @@ export const VIBES: Vibe[] = [
     category: 'business',
     emoji: '🛍️',
     description: 'Clean focus on products.',
-    cutSettings: { minDuration: 2.5, maxDuration: 3.5, transition: 'fade', effect: 'none' }
+    cutSettings: { minDuration: 2.5, maxDuration: 3.5, transition: 'fade' }
   },
   {
     id: 'fitness',
@@ -118,7 +98,7 @@ export const VIBES: Vibe[] = [
     category: 'business',
     emoji: '💪',
     description: 'High energy, aggressive cuts.',
-    cutSettings: { minDuration: 0.5, maxDuration: 1.5, transition: 'cut', effect: 'none' }
+    cutSettings: { minDuration: 0.5, maxDuration: 1.5, transition: 'cut' }
   },
   {
     id: 'corporate',
@@ -126,7 +106,7 @@ export const VIBES: Vibe[] = [
     category: 'business',
     emoji: '👔',
     description: 'Professional, stable, trustworthy.',
-    cutSettings: { minDuration: 3.0, maxDuration: 5.0, transition: 'fade', effect: 'none' }
+    cutSettings: { minDuration: 3.0, maxDuration: 5.0, transition: 'fade' }
   }
 ];
 
@@ -162,19 +142,12 @@ export const processClipsWithVibe = (clips: SourceClip[], vibeId: string): Proce
       startTime = 0;
     }
 
-    // C. Get Visual Effects
-    // ---------------------
-    const effects = getEffectSettings(settings.effect || 'none');
-
     // --- CLIP 1: The Main Cut ---
     timeline.push({
       assetUrl: clip.url,
       startFrom: startTime, 
       length: safeLength,
-      transition: settings.transition,
-      scaleIn: effects.scaleIn,
-      scaleOut: effects.scaleOut,
-      panX: effects.panX
+      transition: settings.transition
     });
 
     // --- CLIP 2: The "Double Dip" (If video > 30s) ---
@@ -191,11 +164,7 @@ export const processClipsWithVibe = (clips: SourceClip[], vibeId: string): Proce
           assetUrl: clip.url,
           startFrom: middlePoint + startTime, // Offset slightly into the second half
           length: safeSecondLength,
-          transition: settings.transition,
-          // Re-apply effects (or we could flip them for variety later)
-          scaleIn: effects.scaleIn,
-          scaleOut: effects.scaleOut,
-          panX: effects.panX
+          transition: settings.transition
         });
       }
     }

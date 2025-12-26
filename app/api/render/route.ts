@@ -6,11 +6,6 @@ interface ClipInput {
   assetUrl: string;
   startFrom: number;
   length: number;
-  transition?: string;
-  scaleIn?: number;
-  scaleOut?: number;
-  panX?: number;
-  trimStart?: number;
   muted?: boolean;
   width?: number;
   height?: number;
@@ -43,7 +38,7 @@ const getTracksForClip = (clip: ClipInput, start: number, length: number) => {
       {
         clips: [{
           ...baseClip,
-          fit: 'cover' // Fills the screen
+          fit: 'cover'
         }]
       }
     ];
@@ -56,7 +51,7 @@ const getTracksForClip = (clip: ClipInput, start: number, length: number) => {
     {
       clips: [{
         ...baseClip,
-        fit: 'contain' // Shows the whole video
+        fit: 'contain'
       }]
     },
     // Track 2 (Background): Blurred fill
@@ -132,7 +127,8 @@ export async function POST(request: NextRequest) {
     }
     return NextResponse.json({ 
       error: "Failed to render", 
-      details: error.response?.data || error.message 
+      details: error.response?.data || error.message,
+      fullError: JSON.stringify(error.response?.data || error.message)
     }, { status: 500 });
   }
 }

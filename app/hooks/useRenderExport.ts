@@ -51,7 +51,8 @@ export function useRenderExport(projectId?: string, userId?: string) {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to start render');
+        console.error('Render API error:', errorData);
+        throw new Error(errorData.error || errorData.details || 'Failed to start render');
       }
 
       const data = await response.json();
