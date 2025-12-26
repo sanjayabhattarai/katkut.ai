@@ -204,12 +204,22 @@ export default function Home() {
       await new Promise(resolve => setTimeout(resolve, 1000));
 
       setProgress("Finalizing studio...");
+      
+      // Map ProcessedClip to editor-compatible format
+      const editorClips = clipsWithVibe.map(clip => ({
+        url: clip.assetUrl,
+        duration: clip.length,
+        trimStart: clip.startFrom,
+        trimDuration: clip.length,
+        muted: false
+      }));
+      
       const projectRef = await addDoc(collection(db, "projects"), {
         userId: user!.uid,
         createdAt: serverTimestamp(),
         status: 'draft',
         vibe: selectedVibe.id,
-        clips: clipsWithVibe,
+        clips: editorClips,
       });
 
       router.push(`/editor/${projectRef.id}`);

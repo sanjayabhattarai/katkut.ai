@@ -3,12 +3,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import axios from 'axios';
 
 interface ClipInput {
-  url: string;
-  duration: number;
+  assetUrl: string;
+  startFrom: number;
+  length: number;
+  transition?: string;
+  scaleIn?: number;
+  scaleOut?: number;
+  panX?: number;
   trimStart?: number;
-  trimDuration?: number;
   muted?: boolean;
-  width?: number;   // Video dimensions for smart processing
+  width?: number;
   height?: number;
 }
 
@@ -26,8 +30,8 @@ const getTracksForClip = (clip: ClipInput, start: number, length: number) => {
   const baseClip = {
     asset: { 
       type: 'video', 
-      src: clip.url, 
-      trim: clip.trimStart || 0 
+      src: clip.assetUrl,
+      trim: clip.startFrom || 0
     },
     start,
     length
@@ -73,6 +77,7 @@ export async function POST(request: NextRequest) {
     const clipsData: ClipInput[] = body.clips;
 
     if (!clipsData || clipsData.length === 0) {
+      console.error('❌ No clips provided');
       return NextResponse.json({ error: "No videos provided" }, { status: 400 });
     }
 
@@ -80,28 +85,13 @@ export async function POST(request: NextRequest) {
     const allTracks: ShotstackTrack[] = [];
     
     // Process each clip and collect all tracks
-    clipsData.forEach((clip) => {
-      let cutStart = 0;
-      let cutLength = 0;
-
-      // Determine trim values
-      if (clip.trimStart !== undefined && clip.trimDuration !== undefined) {
-        cutStart = clip.trimStart;
-        cutLength = clip.trimDuration;
-      } else {
-        if (clip.duration < 5) {
-          cutStart = 0;
-          cutLength = clip.duration;
-        } else {
-          cutLength = 3.5; 
-          const center = clip.duration / 2;
-          cutStart = center - 1.75; 
-        }
-      }
+    clipsData.forEach((clip, index) => {
+      // Use the length directly from the clip (already calculated by vibe logic)
+      const cutLength = clip.length;
 
       // Get tracks for this clip (1 for vertical, 2 for horizontal/square)
       const clipTracks = getTracksForClip(
-        { ...clip, trimStart: cutStart }, 
+        clip, 
         currentTime, 
         cutLength
       );
@@ -124,6 +114,7 @@ export async function POST(request: NextRequest) {
       }
     };
 
+
     const response = await axios.post(ENDPOINT, jsonPayload, {
       headers: {
         "x-api-key": API_KEY,
@@ -134,7 +125,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, id: response.data.response.id });
 
   } catch (error: any) {
-    console.error("❌ Error:", error);
-    return NextResponse.json({ error: "Failed to render" }, { status: 500 });
+    console.error("❌ Render Error:", error.message);
+    if (error.response) {
+      console.error("❌ Shotstack Response:", error.response.data);
+      console.error("❌ Status:", error.response.status);
+    }
+    return NextResponse.json({ 
+      error: "Failed to render", 
+      details: error.response?.data || error.message 
+    }, { status: 500 });
   }
 }

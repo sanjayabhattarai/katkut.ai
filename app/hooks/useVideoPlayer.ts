@@ -30,7 +30,6 @@ export const useVideoPlayer = (project: { clips: Clip[] } | null, activeClipInde
         const currentSrc = vid.getAttribute("src");
 
         if (currentSrc !== activeClip.url) {
-             console.log("🎬 Loading Active Clip:", activeClipIndex, activeClip.url);
              setIsBuffering(true);
              vid.src = activeClip.url;
              // Reset currentTime BEFORE load to ensure clean state
@@ -63,7 +62,6 @@ export const useVideoPlayer = (project: { clips: Clip[] } | null, activeClipInde
         
         const currentSrc = vid.getAttribute("src");
         if (currentSrc !== nextClip.url) {
-            console.log("⏳ Preloading Next Clip:", nextClipIdx, nextClip.url);
             vid.src = nextClip.url;
             // Set the correct position for the next clip
             vid.currentTime = nextClip.trimStart || 0;
